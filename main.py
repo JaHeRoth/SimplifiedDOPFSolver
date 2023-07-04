@@ -1,3 +1,4 @@
+from datetime import datetime
 from matplotlib import pyplot as plt
 from gurobipy import Model, quicksum, GRB
 import time
@@ -56,8 +57,9 @@ def print_flow(cost, flow, merged=False):
     # Merging antiparallel flows will typically reduce the cost. As `cost` is the cost of the unmerged flow it
     # thus tends to be a slight overapproximation of the cost of the merged flow
     print(f"Obtained solution of value {'at most' if merged else ''} {cost}:")
-    for name, value in flow.items():
-        print(f"\t{name}: {value}")
+    if len(flow) < 50:
+        for name, value in flow.items():
+            print(f"\t{name}: {value}")
     print("---------------------------------------------")
 
 
@@ -169,14 +171,20 @@ def plot_flow(flow, G):
 
 
 def solve(G, verbosity=1):
+    start = datetime.now()
     Gp = algorithm3(G)
     Gpp = algorithm2(Gp, 1)
+    if verbosity > 0:
+        print(f"Graph modifications algorithm ran in {(datetime.now()-start).total_seconds():.2} seconds.")
     if verbosity > 2:
         nx.draw_networkx(G)
         plt.show()
         plot_multigraph(Gp)
         plot_multigraph(Gpp)
+    start = datetime.now()
     cost, flow = find_optimal_flow(Gpp, verbose=(verbosity > 1))
+    if verbosity > 0:
+        print(f"Defined and solved Gurobi program in {(datetime.now()-start).total_seconds():.2} seconds.")
     merged_flow = to_original_graph_flow(flow, Gpp)
     if verbosity > 0:
         print_flow(cost, merged_flow, merged=True)
@@ -184,7 +192,7 @@ def solve(G, verbosity=1):
     return cost, merged_flow
 
 
-def fetch_l2rpn_graph(name):
+def fetch_l2rpn_grid(name):
     env = grid2op.make(name)
     obs = env.reset()
     rawG = obs.get_energy_graph()
@@ -206,22 +214,26 @@ def fetch_l2rpn_graph(name):
     return G
 
 
-def ieee(capacity, resistance, supplies, demands, prodcpus, env_name="l2rpn_case14_sandbox"):
-    env = grid2op.make(env_name)
-    obs = env.reset()
-    rawG = obs.get_energy_graph()
+def make_grid(capacity, resistance, supplies, demands, prodcpus, graph):
     G = nx.Graph(sources=[], sinks=[], capacity=capacity, supplies=supplies)
-    for node, attr in rawG.nodes(data=True):
+    for node, attr in graph.nodes(data=True):
         node_w_data = (node, {"d": demands[node]})
         if node in supplies.keys():
             node_w_data[1]["c"] = prodcpus[node]
             G.graph["sources"].append(node_w_data)
         G.graph["sinks"].append(node_w_data)
         G.add_nodes_from([node_w_data])
-    for u, v, attr in rawG.edges(data=True):
+    for u, v, attr in graph.edges(data=True):
         arc_w_data = (u, v, {"r": resistance, "u": capacity})
         G.add_edges_from([arc_w_data])
     return G
+
+
+def ieee(capacity, resistance, supplies, demands, prodcpus, env_name="l2rpn_case14_sandbox"):
+    env = grid2op.make(env_name)
+    obs = env.reset()
+    rawG = obs.get_energy_graph()
+    return make_grid(capacity, resistance, supplies, demands, prodcpus, rawG)
 
 
 def realistic_instance(kV=-2):
@@ -284,5 +296,15 @@ def big_funky_instance():
     return ieee(capacity, resistance, supplies, demands, prodcpus, env_name="l2rpn_wcci_2022")
 
 
+def huge_instance():
+    node_count = 1000
+    capacity = 200
+    resistance = 1e-3
+    demands = {node: 50 for node in range(node_count)}
+    supplies = {node: 100 for node in range(node_count)}
+    prodcpus = {node: [(supplies[node], node + 1)] for node in range(node_count)}
+    return make_grid(capacity, resistance, supplies, demands, prodcpus, nx.complete_graph(node_count))
+
+
 #G = fetch_l2rpn_graph("l2rpn_case14_sandbox")
-flow = solve(big_funky_instance(), verbosity=2)
+flow = solve(huge_instance(), verbosity=2)
