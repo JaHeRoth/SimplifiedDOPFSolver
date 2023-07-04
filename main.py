@@ -153,11 +153,17 @@ def plot_flow(flow, G):
                       for node in G.nodes]
     edge_intensity = [edge_use[edge] for edge in G.edges]
     edge_labels = {edge: f"{round(edge_use[edge]*100)}" for edge in G.edges}
-    pos = nx.spring_layout(G)
-    nx.draw_networkx(G, pos, cmap=plt.get_cmap("cool"), node_color=node_intensity, vmin=0, vmax=1,
-                     edge_cmap=plt.get_cmap("cool"), edge_color=edge_intensity, edge_vmin=0, edge_vmax=1)
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
-    plt.title("Edge utilization in percent, with generator and edge utilization heat maps")
+    if len(G.nodes) < 20:
+        plt.title("Edge utilization in percent, with generator and edge utilization heat maps")
+        pos = nx.spring_layout(G)
+        nx.draw_networkx(G, pos, cmap=plt.get_cmap("cool"), node_color=node_intensity, vmin=0, vmax=1,
+                         edge_cmap=plt.get_cmap("cool"), edge_color=edge_intensity, edge_vmin=0, edge_vmax=1)
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
+    else:
+        plt.title("Generator and edge utilization heat maps (teal=0, pink=1)")
+        nx.draw_networkx(G, node_size=50, with_labels=False, cmap=plt.get_cmap("cool"), node_color=node_intensity,
+                         vmin=0, vmax=1,
+                         edge_cmap=plt.get_cmap("cool"), edge_color=edge_intensity, edge_vmin=0, edge_vmax=1)
     plt.savefig(f"plots/{time.time()}.pdf", bbox_inches='tight')
     plt.show()
 
@@ -200,8 +206,8 @@ def fetch_l2rpn_graph(name):
     return G
 
 
-def ieee14(capacity, resistance, supplies, demands, prodcpus):
-    env = grid2op.make("l2rpn_case14_sandbox")
+def ieee(capacity, resistance, supplies, demands, prodcpus, env_name="l2rpn_case14_sandbox"):
+    env = grid2op.make(env_name)
     obs = env.reset()
     rawG = obs.get_energy_graph()
     G = nx.Graph(sources=[], sinks=[], capacity=capacity, supplies=supplies)
@@ -246,7 +252,7 @@ def realistic_instance(kV=-2):
     prodcpus = {key: [(supplies[key] / 2, cost_coeff[key][0]),
                 (supplies[key] / 2, cost_coeff[key][0] + cost_coeff[key][1] * (supplies[key] / 2) ** 2)]
           for key in supplies.keys()}
-    return ieee14(capacity, resistance, supplies, demands, prodcpus)
+    return ieee(capacity, resistance, supplies, demands, prodcpus)
 
 
 def funky_instance():
@@ -255,18 +261,28 @@ def funky_instance():
     demands = {node: 50 for node in range(14)}
     supplies = {1: 500, 6: 500, 10: 500, 11: 500}
     prodcpus = {node: [(supplies[node], node+1)] for node in supplies.keys()}
-    return ieee14(capacity, resistance, supplies, demands, prodcpus)
+    return ieee(capacity, resistance, supplies, demands, prodcpus)
 
 
 def funky_instance2():
+    node_count = 14
     capacity = 40
     resistance = 1e-2
-    demands = {node: 50 for node in range(14)}
-    supplies = {node: 100 for node in range(14)}
-    prodcpus = {node: [(supplies[node], node+1)] for node in range(14)}
-    return ieee14(capacity, resistance, supplies, demands, prodcpus)
+    demands = {node: 50 for node in range(node_count)}
+    supplies = {node: 100 for node in range(node_count)}
+    prodcpus = {node: [(supplies[node], node+1)] for node in range(node_count)}
+    return ieee(capacity, resistance, supplies, demands, prodcpus)
 
 
-#env_name = "l2rpn_case14_sandbox"
-#G = fetch_l2rpn_graph(env_name)
-flow = solve(funky_instance2(), verbosity=2)
+def big_funky_instance():
+    node_count = 118
+    capacity = 200
+    resistance = 1e-3
+    demands = {node: 50 for node in range(node_count)}
+    supplies = {node: 100 for node in range(node_count)}
+    prodcpus = {node: [(supplies[node], node+1)] for node in range(node_count)}
+    return ieee(capacity, resistance, supplies, demands, prodcpus, env_name="l2rpn_wcci_2022")
+
+
+#G = fetch_l2rpn_graph("l2rpn_case14_sandbox")
+flow = solve(big_funky_instance(), verbosity=2)
