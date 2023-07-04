@@ -145,16 +145,20 @@ def to_original_graph_flow(flow, G):
 
 
 def plot_flow(flow, G):
-    edge_use = {(u, v): (flow[f"x_{(u, v, 0)}"]
-                    if f"x_{(u, v, 0)}" in flow.keys()
-                    else flow[f"x_{(v, u, 0)}"]) / G.graph['capacity']
-                for u, v in G.edges}
+    edge_use = {(u, v): (flow.get(f"x_{(u, v, 0)}", 0) + flow.get(f"x_{(v, u, 0)}", 0))
+                        / G.graph['capacity'] for u, v in G.edges}
+    node_intensity = [max(0, sum(flow.get(f"x_{(node, neigh, 0)}", 0) - flow.get(f"y_{(neigh, node, 0)}", 0)
+                          for neigh in G.neighbors(node)) / G.graph["supplies"][node])
+                      if node in G.graph["supplies"].keys() else 1
+                      for node in G.nodes]
     edge_intensity = [edge_use[edge] for edge in G.edges]
-    edge_labels = {edge: f"{round(edge_use[edge]*100)}%" for edge in G.edges}
+    edge_labels = {edge: f"{round(edge_use[edge]*100)}" for edge in G.edges}
     pos = nx.spring_layout(G)
-    nx.draw_networkx(G, pos, edge_cmap=plt.get_cmap("cool"), edge_color=edge_intensity, edge_vmin=0, edge_vmax=1)
+    nx.draw_networkx(G, pos, cmap=plt.get_cmap("cool"), node_color=node_intensity, vmin=0, vmax=1,
+                     edge_cmap=plt.get_cmap("cool"), edge_color=edge_intensity, edge_vmin=0, edge_vmax=1)
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
-    plt.savefig(f"plots/{time.time()}.pdf")
+    plt.title("Edge utilization in percent, with generator and edge utilization heat maps")
+    plt.savefig(f"plots/{time.time()}.pdf", bbox_inches='tight')
     plt.show()
 
 
@@ -196,43 +200,15 @@ def fetch_l2rpn_graph(name):
     return G
 
 
-def ieee14(kV=-2):
-    # Numbers copied or estimated from "Optimal Power Systems Planning for IEEE-14 Bus Test System Application"
-    # and Transmission Facts (by AMERICAN ELECTRIC POWER)
-    # Note how everything is in MW instead of in current, as these are anyway just a multiple when voltage is constant
-    # kV=-1 represents the easiest case, while kV=-2 represents a barely feasible (rather: barely Gurobi-solvable) case
+def ieee14(capacity, resistance, supplies, demands, prodcpus):
     env = grid2op.make("l2rpn_case14_sandbox")
     obs = env.reset()
     rawG = obs.get_energy_graph()
-    if kV == 345:
-        capacity = 400
-        resistance = 41.9 * 1e-6
-    elif kV==500:
-        capacity = 900
-        resistance = 11 * 1e-6
-    elif kV==765:
-        capacity = 2200
-        resistance = 3.4 * 1e-6
-    elif kV==-1:
-        capacity = 1e6
-        resistance = 0
-    elif kV==-2:
-        capacity = 175
-        resistance = 95.939 * 1e-6
-    else:
-        raise ValueError
-    supplies = {1: 300, 2: 500, 3: 55, 6: 300, 8: 700}
-    avg_demand = 1200 / len(rawG.nodes)
-    prodcpus = {1: (16.91, 0.00048), 2: (17.26, 0.00031), 3: (0, 0), 6: (16.6, 0.002), 8: (16.5, 0.00211)}
-    cs = {key: [(supplies[key]/2, prodcpus[key][0]),
-                (supplies[key]/2, prodcpus[key][0] + prodcpus[key][1] * (supplies[key]/2)**2)]
-          for key in supplies.keys()}
-
-    G = nx.Graph(sources=[], sinks=[], capacity=capacity)
+    G = nx.Graph(sources=[], sinks=[], capacity=capacity, supplies=supplies)
     for node, attr in rawG.nodes(data=True):
-        node_w_data = (node, {"d": avg_demand})
+        node_w_data = (node, {"d": demands[node]})
         if node in supplies.keys():
-            node_w_data[1]["c"] = cs[node]
+            node_w_data[1]["c"] = prodcpus[node]
             G.graph["sources"].append(node_w_data)
         G.graph["sinks"].append(node_w_data)
         G.add_nodes_from([node_w_data])
@@ -242,6 +218,37 @@ def ieee14(kV=-2):
     return G
 
 
+def realistic_instance(kV=-2):
+    # Numbers copied or estimated from "Optimal Power Systems Planning for IEEE-14 Bus Test System Application"
+    # and Transmission Facts (by AMERICAN ELECTRIC POWER)
+    # Note how everything is in MW instead of in current, as these are anyway just a multiple when voltage is constant
+    # kV=-1 represents the easiest case, while kV=-2 represents a barely feasible (rather: barely Gurobi-solvable) case
+    if kV == 345:
+        capacity = 400
+        resistance = 41.9 * 1e-6
+    elif kV == 500:
+        capacity = 900
+        resistance = 11 * 1e-6
+    elif kV == 765:
+        capacity = 2200
+        resistance = 3.4 * 1e-6
+    elif kV == -1:
+        capacity = 1e6
+        resistance = 0
+    elif kV == -2:
+        capacity = 175
+        resistance = 95.939 * 1e-6
+    else:
+        raise ValueError
+    supplies = {1: 300, 2: 500, 3: 55, 6: 300, 8: 700}
+    demands = {node: 1200 / 14 for node in range(14)}
+    cost_coeff = {1: (16.91, 0.00048), 2: (17.26, 0.00031), 3: (0, 0), 6: (16.6, 0.002), 8: (16.5, 0.00211)}
+    prodcpus = {key: [(supplies[key] / 2, cost_coeff[key][0]),
+                (supplies[key] / 2, cost_coeff[key][0] + cost_coeff[key][1] * (supplies[key] / 2) ** 2)]
+          for key in supplies.keys()}
+    return ieee14(capacity, resistance, supplies, demands, prodcpus)
+
+
 #env_name = "l2rpn_case14_sandbox"
 #G = fetch_l2rpn_graph(env_name)
-flow = solve(ieee14(), verbosity=2)
+flow = solve(realistic_instance(), verbosity=2)
