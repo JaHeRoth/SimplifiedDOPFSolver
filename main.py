@@ -5,7 +5,7 @@ import networkx as nx
 
 
 def plot_multigraph(G):
-    pos = nx.spring_layout(G)  # Alternatively: planar_layout
+    pos = nx.spring_layout(G)
     names = {name: name for name in G.nodes}
     nx.draw_networkx_nodes(G, pos, node_color='b', node_size=500, alpha=1)
     nx.draw_networkx_labels(G, pos, names, font_size=10, font_color='w')
@@ -89,14 +89,14 @@ def algorithm3(G):
         if "cr" in attr:
             # Step 2a
             for i, (length, cost) in enumerate(attr["cr"]):
-                node = f"{src}_{i}"
+                node = f"{src}_s{i}"
                 Gp.graph["sources"].append((node, {"c": [(length, cost)]}))
                 Gp.add_node(node, c=cost)
                 Gp.add_edge(node, src, r=0, u=length)
             del Gp.nodes[src]["cr"]
         else:
             # Step 2b
-            node = f"{src}'"
+            node = f"{src}_s"
             Gp.graph["sources"].append((node, attr))
             Gp.add_node(node, c=attr["c"])
             csupply = sum(l for l, _ in attr["c"])
@@ -104,7 +104,7 @@ def algorithm3(G):
             del Gp.nodes[src]["c"]
     # Step 3
     for sink, attr in G.graph["sinks"]:
-        node = f"{sink}'"
+        node = f"{sink}_d"
         Gp.graph["sinks"].append((node, attr))
         Gp.add_node(node, d=attr["d"]) # TODO: Ensure this only adds attribute to node if it already exists
         Gp.add_edge(sink, node, r=0, u=attr["d"])
@@ -214,4 +214,4 @@ def ieee14():
 
 #env_name = "l2rpn_case14_sandbox"
 #G = fetch_l2rpn_graph(env_name)
-flow = solve(ieee14(), verbosity=2)
+flow = solve(ieee14(), verbosity=3)
