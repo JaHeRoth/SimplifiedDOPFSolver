@@ -152,8 +152,8 @@ def plot_flow(flow, G):
     edge_intensity = [edge_use[edge] for edge in G.edges]
     edge_labels = {edge: f"{round(edge_use[edge]*100)}%" for edge in G.edges}
     pos = nx.spring_layout(G)
-    nx.draw_networkx(G, pos, edge_cmap=plt.get_cmap("cool"), edge_color=edge_intensity)
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+    nx.draw_networkx(G, pos, edge_cmap=plt.get_cmap("cool"), edge_color=edge_intensity, edge_vmin=0, edge_vmax=1)
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
     plt.savefig(f"plots/{time.time()}.pdf")
     plt.show()
 
