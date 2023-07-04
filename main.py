@@ -249,6 +249,15 @@ def realistic_instance(kV=-2):
     return ieee14(capacity, resistance, supplies, demands, prodcpus)
 
 
+def funky_instance():
+    capacity = 200
+    resistance = 5e-3
+    demands = {node: 50 for node in range(14)}
+    supplies = {1: 500, 6: 500, 10: 500, 11: 500}
+    prodcpus = {node: [(supplies[node], node)] for node in supplies.keys()}
+    return ieee14(capacity, resistance, supplies, demands, prodcpus)
+
+
 #env_name = "l2rpn_case14_sandbox"
 #G = fetch_l2rpn_graph(env_name)
-flow = solve(realistic_instance(), verbosity=2)
+flow = solve(funky_instance(), verbosity=2)
