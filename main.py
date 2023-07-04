@@ -254,10 +254,19 @@ def funky_instance():
     resistance = 5e-3
     demands = {node: 50 for node in range(14)}
     supplies = {1: 500, 6: 500, 10: 500, 11: 500}
-    prodcpus = {node: [(supplies[node], node)] for node in supplies.keys()}
+    prodcpus = {node: [(supplies[node], node+1)] for node in supplies.keys()}
+    return ieee14(capacity, resistance, supplies, demands, prodcpus)
+
+
+def funky_instance2():
+    capacity = 40
+    resistance = 1e-2
+    demands = {node: 50 for node in range(14)}
+    supplies = {node: 100 for node in range(14)}
+    prodcpus = {node: [(supplies[node], node+1)] for node in range(14)}
     return ieee14(capacity, resistance, supplies, demands, prodcpus)
 
 
 #env_name = "l2rpn_case14_sandbox"
 #G = fetch_l2rpn_graph(env_name)
-flow = solve(funky_instance(), verbosity=2)
+flow = solve(funky_instance2(), verbosity=2)
