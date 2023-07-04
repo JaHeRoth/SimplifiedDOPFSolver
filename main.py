@@ -1,4 +1,8 @@
+import json
 from datetime import datetime
+import timeit
+
+import numpy as np
 from matplotlib import pyplot as plt
 from gurobipy import Model, quicksum, GRB
 import time
@@ -171,11 +175,11 @@ def plot_flow(flow, G):
 
 
 def solve(G, verbosity=1):
-    start = datetime.now()
+    sstart = datetime.now()
     Gp = algorithm3(G)
     Gpp = algorithm2(Gp, 1)
     if verbosity > 0:
-        print(f"Graph modifications algorithm ran in {(datetime.now()-start).total_seconds():.2} seconds.")
+        print(f"Graph modifications algorithm ran in {(datetime.now()-sstart).total_seconds():.2} seconds.")
     if verbosity > 2:
         nx.draw_networkx(G)
         plt.show()
@@ -186,10 +190,13 @@ def solve(G, verbosity=1):
     if verbosity > 0:
         print(f"Defined and solved Gurobi program in {(datetime.now()-start).total_seconds():.2} seconds.")
     merged_flow = to_original_graph_flow(flow, Gpp)
+    total_runtime = (datetime.now()-sstart).total_seconds()
     if verbosity > 0:
+        print(f"Obtained merged flow. Total runtime from original graph to this near-optimal flow on it:"
+              f"{total_runtime:.2} seconds.")
         print_flow(cost, merged_flow, merged=True)
         plot_flow(merged_flow, G)
-    return cost, merged_flow
+    return cost, merged_flow, total_runtime
 
 
 def fetch_l2rpn_grid(name):
@@ -296,15 +303,36 @@ def big_funky_instance():
     return ieee(capacity, resistance, supplies, demands, prodcpus, env_name="l2rpn_wcci_2022")
 
 
-def huge_instance():
-    node_count = 1000
+def grid_from_graph(graph):
+    """graph: networkx graph with numbers as node names"""
     capacity = 200
     resistance = 1e-3
-    demands = {node: 50 for node in range(node_count)}
-    supplies = {node: 100 for node in range(node_count)}
-    prodcpus = {node: [(supplies[node], node + 1)] for node in range(node_count)}
-    return make_grid(capacity, resistance, supplies, demands, prodcpus, nx.complete_graph(node_count))
+    demands = {node: 50 for node in graph.nodes}
+    supplies = {node: 100 for node in graph.nodes}
+    prodcpus = {node: [(supplies[node], node + 1)] for node in graph.nodes}
+    return make_grid(capacity, resistance, supplies, demands, prodcpus, graph)
+
+
+def benchmark():
+    repeats = 8
+    node_counts = [n for n in range(1, 202, 5)]
+    runtimes = [timeit.Timer(lambda: solve(grid_from_graph(nx.complete_graph(n)), verbosity=0)).timeit(number=repeats) / repeats for n in node_counts]
+    results = {node_counts[i]: runtimes[i] for i, n in enumerate(node_counts)}
+    qcoeffs = np.polyfit(x=np.array(node_counts), y=np.array(runtimes), deg=2)
+    quadratic_fit = np.poly1d(qcoeffs)
+    results["quadratic_fit"] = f"({qcoeffs[0]:.4}) x^2 + ({qcoeffs[1]:.4}) x + ({qcoeffs[2]:.4})"
+    with open('output/benchmark_scores.json', 'w') as file:
+        json.dump(results, file, indent=4)
+    plt.plot(node_counts, runtimes)
+    polyline = np.linspace(node_counts[0], node_counts[-1], 100)
+    plt.plot(polyline, quadratic_fit(polyline))
+    plt.title("Total runtime (transforming graph, building QCQP, solving QCQP) for K(n) graphs")
+    plt.xlabel("n")
+    plt.ylabel("s")
+    plt.savefig("output/benchmark_scores.pdf", bbox_inches='tight')
+    plt.show()
 
 
 #G = fetch_l2rpn_graph("l2rpn_case14_sandbox")
-flow = solve(huge_instance(), verbosity=2)
+#flow, _, _ = solve(grid_from_graph(nx.complete_graph(10)), verbosity=2)
+benchmark()
