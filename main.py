@@ -1,5 +1,6 @@
 from matplotlib import pyplot as plt
 from gurobipy import Model, quicksum, GRB
+import time
 import grid2op
 import networkx as nx
 
@@ -81,7 +82,7 @@ def algorithm3(G):
     sink_connected = set(nx.multi_source_dijkstra_path_length(
         G, [v for v, _ in G.graph["sinks"]]).keys())
     relevant = src_connected.intersection(sink_connected)
-    Gp = G.subgraph(relevant).to_directed()
+    Gp = nx.MultiGraph(G).subgraph(relevant).to_directed()
     Gp.graph["sources"] = []
     Gp.graph["sinks"] = []
     # Step 2
@@ -143,6 +144,20 @@ def to_original_graph_flow(flow, G):
     return flow
 
 
+def plot_flow(flow, G):
+    edge_use = {(u, v): (flow[f"x_{(u, v, 0)}"]
+                    if f"x_{(u, v, 0)}" in flow.keys()
+                    else flow[f"x_{(v, u, 0)}"]) / G.graph['capacity']
+                for u, v in G.edges}
+    edge_intensity = [edge_use[edge] for edge in G.edges]
+    edge_labels = {edge: f"{round(edge_use[edge]*100)}%" for edge in G.edges}
+    pos = nx.spring_layout(G)
+    nx.draw_networkx(G, pos, edge_cmap=plt.get_cmap("cool"), edge_color=edge_intensity)
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+    plt.savefig(f"plots/{time.time()}.pdf")
+    plt.show()
+
+
 def solve(G, verbosity=1):
     Gp = algorithm3(G)
     Gpp = algorithm2(Gp, 1)
@@ -152,10 +167,11 @@ def solve(G, verbosity=1):
         plot_multigraph(Gp)
         plot_multigraph(Gpp)
     cost, flow = find_optimal_flow(Gpp, verbose=(verbosity > 1))
-    merged_flow = to_original_graph_flow(flow)
+    merged_flow = to_original_graph_flow(flow, Gpp)
     if verbosity > 0:
         print_flow(cost, merged_flow, merged=True)
-    return merged_flow
+        plot_flow(merged_flow, G)
+    return cost, merged_flow
 
 
 def fetch_l2rpn_graph(name):
@@ -180,25 +196,39 @@ def fetch_l2rpn_graph(name):
     return G
 
 
-def ieee14():
+def ieee14(kV=-2):
     # Numbers copied or estimated from "Optimal Power Systems Planning for IEEE-14 Bus Test System Application"
     # and Transmission Facts (by AMERICAN ELECTRIC POWER)
+    # Note how everything is in MW instead of in current, as these are anyway just a multiple when voltage is constant
+    # kV=-1 represents the easiest case, while kV=-2 represents a barely feasible (rather: barely Gurobi-solvable) case
     env = grid2op.make("l2rpn_case14_sandbox")
     obs = env.reset()
     rawG = obs.get_energy_graph()
-    voltage = 500 * 1e3
-    MW_capacity = 900
-    resistance = 6.3 * 1e-9
-    MW_supplies = {1: 300, 2: 500, 3: 55, 6: 300, 8: 700}
-    MV_demand = 1200
-    supplies = {key: value * 1e6 / voltage for key, value in MW_supplies.items()}
+    if kV == 345:
+        capacity = 400
+        resistance = 41.9 * 1e-6
+    elif kV==500:
+        capacity = 900
+        resistance = 11 * 1e-6
+    elif kV==765:
+        capacity = 2200
+        resistance = 3.4 * 1e-6
+    elif kV==-1:
+        capacity = 1e6
+        resistance = 0
+    elif kV==-2:
+        capacity = 175
+        resistance = 95.939 * 1e-6
+    else:
+        raise ValueError
+    supplies = {1: 300, 2: 500, 3: 55, 6: 300, 8: 700}
+    avg_demand = 1200 / len(rawG.nodes)
     prodcpus = {1: (16.91, 0.00048), 2: (17.26, 0.00031), 3: (0, 0), 6: (16.6, 0.002), 8: (16.5, 0.00211)}
-    cs = {key: [(supplies[key]/2, prodcpus[key][0] * voltage / 1e6),
-                (supplies[key]/2, prodcpus[key][0] * voltage / 1e6 + prodcpus[key][1] * (MW_supplies[key]/2)**2)]
+    cs = {key: [(supplies[key]/2, prodcpus[key][0]),
+                (supplies[key]/2, prodcpus[key][0] + prodcpus[key][1] * (supplies[key]/2)**2)]
           for key in supplies.keys()}
-    avg_demand = MV_demand * 1e6 / len(rawG.nodes)
 
-    G = nx.MultiGraph(sources=[], sinks=[])
+    G = nx.Graph(sources=[], sinks=[], capacity=capacity)
     for node, attr in rawG.nodes(data=True):
         node_w_data = (node, {"d": avg_demand})
         if node in supplies.keys():
@@ -207,11 +237,11 @@ def ieee14():
         G.graph["sinks"].append(node_w_data)
         G.add_nodes_from([node_w_data])
     for u, v, attr in rawG.edges(data=True):
-        arc_w_data = (u, v, {"r": resistance, "u": MW_capacity * 1e6 / voltage})
+        arc_w_data = (u, v, {"r": resistance, "u": capacity})
         G.add_edges_from([arc_w_data])
     return G
 
 
 #env_name = "l2rpn_case14_sandbox"
 #G = fetch_l2rpn_graph(env_name)
-flow = solve(ieee14(), verbosity=3)
+flow = solve(ieee14(), verbosity=2)
