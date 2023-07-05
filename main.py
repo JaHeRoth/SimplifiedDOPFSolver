@@ -10,7 +10,7 @@ import grid2op
 import networkx as nx
 
 
-def plot_multigraph(G):
+def plot_multigraph(G, filename):
     pos = nx.spring_layout(G)
     names = {name: name for name in G.nodes}
     nx.draw_networkx_nodes(G, pos, node_color='b', node_size=500, alpha=1)
@@ -28,6 +28,7 @@ def plot_multigraph(G):
                                     ),
                     )
     plt.axis('off')
+    plt.savefig(filename, bbox_inches='tight')
     plt.show()
 
 
@@ -182,9 +183,10 @@ def solve(G, verbosity=1):
         print(f"Graph modifications algorithm ran in {(datetime.now()-sstart).total_seconds():.2} seconds.")
     if verbosity > 2:
         nx.draw_networkx(G)
+        plt.savefig(f"plots/G_{time.time()}.pdf", bbox_inches='tight')
         plt.show()
-        plot_multigraph(Gp)
-        plot_multigraph(Gpp)
+        plot_multigraph(Gp, f"plots/Gp_{time.time()}.pdf")
+        plot_multigraph(Gpp, f"plots/Gpp_{time.time()}.pdf")
     start = datetime.now()
     cost, flow = find_optimal_flow(Gpp, verbose=(verbosity > 1))
     if verbosity > 0:
@@ -313,10 +315,7 @@ def grid_from_graph(graph):
     return make_grid(capacity, resistance, supplies, demands, prodcpus, graph)
 
 
-def benchmark():
-    repeats = 8
-    node_counts = [n for n in range(1, 202, 5)]
-    runtimes = [timeit.Timer(lambda: solve(grid_from_graph(nx.complete_graph(n)), verbosity=0)).timeit(number=repeats) / repeats for n in node_counts]
+def save_and_display_benchmark(node_counts, runtimes):
     results = {node_counts[i]: runtimes[i] for i, n in enumerate(node_counts)}
     qcoeffs = np.polyfit(x=np.array(node_counts), y=np.array(runtimes), deg=2)
     quadratic_fit = np.poly1d(qcoeffs)
@@ -325,14 +324,33 @@ def benchmark():
         json.dump(results, file, indent=4)
     plt.plot(node_counts, runtimes)
     polyline = np.linspace(node_counts[0], node_counts[-1], 100)
-    plt.plot(polyline, quadratic_fit(polyline))
-    plt.title("Total runtime (transforming graph, building QCQP, solving QCQP) for K(n) graphs")
+    plt.plot(polyline, quadratic_fit(polyline), label=results["quadratic_fit"])
+    plt.title("Total runtime (transforming graph, building QCQP, solving QCQP,\n"
+              "merging anti-parallel flows) for cycle graph of n nodes")
     plt.xlabel("n")
     plt.ylabel("s")
+    plt.legend()
     plt.savefig("output/benchmark_scores.pdf", bbox_inches='tight')
     plt.show()
 
 
+def benchmark():
+    repeats = 15
+    node_counts = [n for n in range(1, 1002, 10)]
+    runtimes = [timeit.Timer(lambda: solve(grid_from_graph(nx.cycle_graph(n)), verbosity=0)).timeit(number=repeats) / repeats for n in node_counts]
+    save_and_display_benchmark(node_counts, runtimes)
+
+
+def load_benchmark():
+    with open('output/benchmark_scores.json', 'r') as file:
+        results = json.load(file)
+        del results["quadratic_fit"]
+    node_counts = [int(n) for n in results.keys()]
+    runtimes = [float(v) for v in results.values()]
+    save_and_display_benchmark(node_counts, runtimes)
+
+
 #G = fetch_l2rpn_graph("l2rpn_case14_sandbox")
-#flow, _, _ = solve(grid_from_graph(nx.complete_graph(10)), verbosity=2)
-benchmark()
+# flow, _, _ = solve(grid_from_graph(nx.wheel_graph(3)), verbosity=3)
+# benchmark()
+load_benchmark()
