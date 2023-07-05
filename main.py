@@ -335,9 +335,16 @@ def save_and_display_benchmark(node_counts, runtimes):
 
 
 def benchmark():
-    repeats = 15
-    node_counts = [n for n in range(1, 1002, 10)]
-    runtimes = [timeit.Timer(lambda: solve(grid_from_graph(nx.cycle_graph(n)), verbosity=0)).timeit(number=repeats) / repeats for n in node_counts]
+    repeats = 5
+    num_unique_n = 20
+    largest_n = 2501
+    step_size = int(np.ceil((largest_n - 1) / num_unique_n))
+    node_counts = [n for n in range(1, largest_n + 1, step_size)]
+    running_order = np.random.default_rng().permutation(np.repeat(range(len(node_counts)), repeats))
+    recorded_runtimes = {n: [] for n in node_counts}
+    for i in running_order:
+        recorded_runtimes[node_counts[i]].append(timeit.Timer(lambda: solve(grid_from_graph(nx.cycle_graph(node_counts[i])), verbosity=0)).timeit(number=1))
+    runtimes = [np.median(recorded_runtimes[n]) for n in node_counts]
     save_and_display_benchmark(node_counts, runtimes)
 
 
@@ -352,5 +359,5 @@ def load_benchmark():
 
 #G = fetch_l2rpn_graph("l2rpn_case14_sandbox")
 # flow, _, _ = solve(grid_from_graph(nx.wheel_graph(3)), verbosity=3)
-# benchmark()
-load_benchmark()
+benchmark()
+# load_benchmark()
