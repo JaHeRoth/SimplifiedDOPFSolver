@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-import timeit
+from timeit import Timer
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -50,7 +50,7 @@ def find_optimal_flow(G, verbose=False):
             qcqp.addConstr(quicksum(in_flows) == quicksum(out_flows))
     qcqp.modelSense = GRB.MINIMIZE
     qcqp.Params.LogToConsole = int(verbose)
-    # qcqp.Params.BarQCPConvTol = 1e-12
+    # qcqp.Params.BarQCPConvTol = 0
     # qcqp.Params.FeasibilityTol = 1e-9
     qcqp.optimize()
     qcqp.write("qcqp.lp")
@@ -153,8 +153,10 @@ def to_original_graph_flow(flow, G):
 
 
 def plot_flow(flow, G):
+    arc_capacities = G.graph['capacity'] if type(G.graph['capacity']) is dict else {
+        edge: G.graph['capacity'] for edge in G.edges}
     edge_use = {(u, v): (flow.get(f"x_{(u, v, 0)}", 0) + flow.get(f"x_{(v, u, 0)}", 0))
-                        / G.graph['capacity'] for u, v in G.edges}
+                        / arc_capacities[(u,v)] for u, v in G.edges}
     node_intensity = [max(0, sum(flow.get(f"x_{(node, neigh, 0)}", 0) - flow.get(f"y_{(neigh, node, 0)}", 0)
                           for neigh in G.neighbors(node)) / G.graph["supplies"][node])
                       if node in G.graph["supplies"].keys() else 1
@@ -195,9 +197,9 @@ def solve(G, verbosity=1):
     merged_flow = to_original_graph_flow(flow, Gpp)
     total_runtime = (datetime.now()-sstart).total_seconds()
     if verbosity > 0:
-        print(f"Obtained merged flow. Total runtime from original graph to this near-optimal flow on it:"
-              f"{total_runtime:.2} seconds.")
-        print_flow(cost, merged_flow, merged=True)
+        print(f"Obtained merged flow. Total runtime: {total_runtime:.3f} seconds.")
+        if verbosity > 1:
+            print_flow(cost, merged_flow, merged=True)
         plot_flow(merged_flow, G)
     return cost, merged_flow, total_runtime
 
@@ -246,6 +248,28 @@ def ieee(capacity, resistance, supplies, demands, prodcpus, env_name="l2rpn_case
     return make_grid(capacity, resistance, supplies, demands, prodcpus, rawG)
 
 
+def trivial_instance():
+    G = nx.Graph(sources=[("a", {"c": [(2, 1)]})], sinks=[("b", {"d": 1})], capacity=2, supplies={"a": 2})
+    G.add_nodes_from(G.graph["sources"])
+    G.add_nodes_from(G.graph["sinks"])
+    G.add_edge("a", "v1", r=1e-1, u=2)
+    G.add_edge("a", "v2", r=1e-1, u=2)
+    G.add_edge("v1", "b", r=1e-1, u=2)
+    G.add_edge("v2", "b", r=1e-1, u=2)
+    # G.graph["capacity"] = {(u,v): attr["u"] for u, v, attr in G.edges(data=True)}
+    return G
+
+
+def trivial_instance2():
+    G = nx.Graph(sources=[("a", {"c": [(2, 1), (2, 2)]})], sinks=[("b1", {"d": 1}), ("b2", {"d": 1})],
+                 capacity=2, supplies={"a": 4})
+    G.add_nodes_from(G.graph["sources"])
+    G.add_nodes_from(G.graph["sinks"])
+    G.add_edge("a", "b1", r=1e-1, u=2)
+    G.add_edge("a", "b2", r=1e-1, u=2)
+    return G
+
+
 def realistic_instance(kV=-2):
     # Numbers copied or estimated from "Optimal Power Systems Planning for IEEE-14 Bus Test System Application"
     # and Transmission Facts (by AMERICAN ELECTRIC POWER)
@@ -265,7 +289,7 @@ def realistic_instance(kV=-2):
         resistance = 0
     elif kV == -2:
         capacity = 175
-        resistance = 95.939 * 1e-6
+        resistance = 95.93999999899998698 * 1e-6
     else:
         raise ValueError
     supplies = {1: 300, 2: 500, 3: 55, 6: 300, 8: 700}
@@ -308,10 +332,10 @@ def big_funky_instance():
 
 def grid_from_graph(graph):
     """graph: networkx graph with numbers as node names"""
-    capacity = 200
+    capacity = np.random.randint(50, 100)
     resistance = 1e-3
-    demands = {node: 50 for node in graph.nodes}
-    supplies = {node: 100 for node in graph.nodes}
+    demands = {node: np.random.randint(0, 50) for node in graph.nodes}
+    supplies = {node: np.random.randint(25, 100) for node in graph.nodes}
     prodcpus = {node: [(supplies[node], node + 1)] for node in graph.nodes}
     return make_grid(capacity, resistance, supplies, demands, prodcpus, graph)
 
@@ -327,7 +351,7 @@ def save_and_display_benchmark(node_counts, runtimes):
     polyline = np.linspace(node_counts[0], node_counts[-1], 100)
     plt.plot(polyline, quadratic_fit(polyline), label=results["quadratic_fit"])
     plt.title("Total runtime (transforming graph, building QCQP, solving QCQP,\n"
-              "merging anti-parallel flows) for cycle graph of n nodes")
+              "merging anti-parallel flows) for wheel graph of n nodes")
     plt.xlabel("n")
     plt.ylabel("s")
     plt.legend()
@@ -336,15 +360,17 @@ def save_and_display_benchmark(node_counts, runtimes):
 
 
 def benchmark():
-    repeats = 7
+    repeats = 5
     num_unique_n = 30
-    largest_n = 10031
+    largest_n = int(1e2)
     step_size = int(np.ceil((largest_n - 1) / num_unique_n))
     node_counts = [n for n in range(1, largest_n + 1, step_size)]
     running_order = np.random.default_rng().permutation(np.repeat(range(len(node_counts)), repeats))
     recorded_runtimes = {n: [] for n in node_counts}
     for i in tqdm(running_order):
-        recorded_runtimes[node_counts[i]].append(timeit.Timer(lambda: solve(grid_from_graph(nx.cycle_graph(node_counts[i])), verbosity=0)).timeit(number=1))
+        recorded_runtimes[node_counts[i]].append(Timer(
+            lambda: solve(grid_from_graph(nx.wheel_graph(node_counts[i])), verbosity=0)
+        ).timeit(number=1))
     runtimes = [np.median(recorded_runtimes[n]) for n in node_counts]
     save_and_display_benchmark(node_counts, runtimes)
 
@@ -359,6 +385,9 @@ def load_benchmark():
 
 
 #G = fetch_l2rpn_graph("l2rpn_case14_sandbox")
-# flow, _, _ = solve(grid_from_graph(nx.wheel_graph(3)), verbosity=3)
-benchmark()
+# flow, _, _ = solve(grid_from_graph(nx.wheel_graph(2)), verbosity=3)
+# solve(big_funky_instance(), verbosity=2)
+# solve(realistic_instance(kV=500))
+solve(trivial_instance2(), verbosity=3)
+# benchmark()
 # load_benchmark()
