@@ -1,5 +1,6 @@
 import json
 import os
+import pathlib
 from datetime import datetime
 from timeit import Timer
 
@@ -251,21 +252,9 @@ def ieee(capacity, resistance, supplies, demands, prodcpus, env_name="l2rpn_case
     return make_grid(capacity, resistance, supplies, demands, prodcpus, rawG)
 
 
-def trivial_instance():
-    G = nx.Graph(sources=[("a", {"c": [(2, 1)]})], sinks=[("b", {"d": 1})], capacity=2, supplies={"a": 2})
-    G.add_nodes_from(G.graph["sources"])
-    G.add_nodes_from(G.graph["sinks"])
-    G.add_edge("a", "v1", r=1e-1, u=2)
-    G.add_edge("a", "v2", r=1e-1, u=2)
-    G.add_edge("v1", "b", r=1e-1, u=2)
-    G.add_edge("v2", "b", r=1e-1, u=2)
-    # G.graph["capacity"] = {(u,v): attr["u"] for u, v, attr in G.edges(data=True)}
-    return G
-
-
-def trivial_instance2():
-    G = nx.Graph(sources=[("a", {"c": [(2, 1), (2, 2)]})], sinks=[("b1", {"d": 1}), ("b2", {"d": 1})],
-                 capacity=2, supplies={"a": 4})
+def trivial_instance(directed=False):
+    G = (nx.DiGraph if directed else nx.Graph)(
+        sources=[("a", {"c": [(2, 1), (2, 2)]})], sinks=[("b1", {"d": 1}), ("b2", {"d": 1})], capacity=2, supplies={"a": 4})
     G.add_nodes_from(G.graph["sources"])
     G.add_nodes_from(G.graph["sinks"])
     G.add_edge("a", "b1", r=1e-1, u=2)
@@ -344,12 +333,13 @@ def grid_from_graph(graph):
 
 
 def save_and_display_benchmark(node_counts, runtimes, graph_type):
-    results = {node_counts[i]: runtimes[i] for i, n in enumerate(node_counts)}
+    results = {int(node_counts[i]): runtimes[i] for i, n in enumerate(node_counts)}
     qcoeffs = np.polyfit(x=np.array(node_counts), y=np.array(runtimes), deg=2)
     quadratic_fit = np.poly1d(qcoeffs)
     results["quadratic_fit"] = f"({qcoeffs[0]:.4}) x^2 + ({qcoeffs[1]:.4}) x + ({qcoeffs[2]:.4})"
-    os.makedirs("benchmarks", exist_ok=True)
-    with open(f"benchmarks/{graph_type}.json", "w") as file:
+    dir = pathlib.Path("benchmarks")
+    os.makedirs(dir, exist_ok=True)
+    with open(dir / f"{graph_type}.json", "w") as file:
         json.dump(results, file, indent=4)
     plt.plot(node_counts, runtimes)
     polyline = np.linspace(node_counts[0], node_counts[-1], 100)
@@ -360,16 +350,15 @@ def save_and_display_benchmark(node_counts, runtimes, graph_type):
     plt.xlabel("n")
     plt.ylabel("s")
     plt.legend()
-    plt.savefig(f"benchmarks/{graph_type}.pdf", bbox_inches='tight')
+    plt.savefig(dir / f"{graph_type}.pdf", bbox_inches='tight')
     plt.show()
 
 
 def benchmark(graph_type):
     repeats = 5
     num_unique_n = 30
-    largest_n = int(2e4)
-    step_size = int(np.ceil((largest_n - 1) / num_unique_n))
-    node_counts = [n for n in range(1, largest_n + 1, step_size)]
+    largest_n = int(2.5e2)
+    node_counts = np.linspace(1, largest_n, num_unique_n, dtype=int)
     running_order = np.random.default_rng().permutation(np.repeat(range(len(node_counts)), repeats))
     recorded_runtimes = {n: [] for n in node_counts}
     for i in tqdm(running_order):
@@ -394,10 +383,12 @@ def load_benchmark(graph_type):
 
 #G = fetch_l2rpn_graph("l2rpn_case14_sandbox")
 # solve(grid_from_graph(nx.complete_graph(5)), verbosity=3)
-# solve(grid_from_graph(nx.cycle_graph(25)), verbosity=0)
+nx.draw_networkx(nx.cycle_graph(25))
+plt.plot()
+plot_multigraph(algorithm2(trivial_instance(directed=True), T=1), f"plots/alg2_trivial_instance_{time.time()}.pdf")
 # solve(grid_from_graph(nx.circular_ladder_graph(10)), verbosity=3)
 # solve(big_funky_instance(), verbosity=2)
 # solve(realistic_instance(kV=500))
-# solve(trivial_instance2(), verbosity=3)
-benchmark(graph_type="cycle")
+# solve(trivial_instance(), verbosity=3)
+# benchmark(graph_type="complete")
 # load_benchmark(graph_type="circular ladder")
