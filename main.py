@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import datetime
 from timeit import Timer
 
@@ -236,7 +237,9 @@ def make_grid(capacity, resistance, supplies, demands, prodcpus, graph):
         G.graph["sinks"].append(node_w_data)
         G.add_nodes_from([node_w_data])
     for u, v, attr in graph.edges(data=True):
-        arc_w_data = (u, v, {"r": resistance, "u": capacity})
+        arc_resistance = resistance[(u, v)] if type(resistance) is dict else resistance
+        arc_capacity = capacity[(u, v)] if type(capacity) is dict else capacity
+        arc_w_data = (u, v, {"r": arc_resistance, "u": arc_capacity})
         G.add_edges_from([arc_w_data])
     return G
 
@@ -332,62 +335,69 @@ def big_funky_instance():
 
 def grid_from_graph(graph):
     """graph: networkx graph with numbers as node names"""
-    capacity = np.random.randint(50, 100)
-    resistance = 1e-3
+    capacity = {arc: np.random.randint(0, 200) for arc in graph.edges}
+    resistance = {arc: 10 ** -(2 + 2 * np.random.rand()) for arc in graph.edges}
     demands = {node: np.random.randint(0, 50) for node in graph.nodes}
-    supplies = {node: np.random.randint(25, 100) for node in graph.nodes}
+    supplies = {node: np.random.randint(50, 100) for node in graph.nodes}
     prodcpus = {node: [(supplies[node], node + 1)] for node in graph.nodes}
     return make_grid(capacity, resistance, supplies, demands, prodcpus, graph)
 
 
-def save_and_display_benchmark(node_counts, runtimes):
+def save_and_display_benchmark(node_counts, runtimes, graph_type):
     results = {node_counts[i]: runtimes[i] for i, n in enumerate(node_counts)}
     qcoeffs = np.polyfit(x=np.array(node_counts), y=np.array(runtimes), deg=2)
     quadratic_fit = np.poly1d(qcoeffs)
     results["quadratic_fit"] = f"({qcoeffs[0]:.4}) x^2 + ({qcoeffs[1]:.4}) x + ({qcoeffs[2]:.4})"
-    with open('output/benchmark_scores.json', 'w') as file:
+    os.makedirs("benchmarks", exist_ok=True)
+    with open(f"benchmarks/{graph_type}.json", "w") as file:
         json.dump(results, file, indent=4)
     plt.plot(node_counts, runtimes)
     polyline = np.linspace(node_counts[0], node_counts[-1], 100)
     plt.plot(polyline, quadratic_fit(polyline), label=results["quadratic_fit"])
     plt.title("Total runtime (transforming graph, building QCQP, solving QCQP,\n"
-              "merging anti-parallel flows) for wheel graph of n nodes")
+              f"merging anti-parallel flows) for {graph_type} graph of "
+              f"{'2n' if graph_type == 'circular ladder' else 'n'} nodes")
     plt.xlabel("n")
     plt.ylabel("s")
     plt.legend()
-    plt.savefig("output/benchmark_scores.pdf", bbox_inches='tight')
+    plt.savefig(f"benchmarks/{graph_type}.pdf", bbox_inches='tight')
     plt.show()
 
 
-def benchmark():
+def benchmark(graph_type):
     repeats = 5
     num_unique_n = 30
-    largest_n = int(1e2)
+    largest_n = int(2e4)
     step_size = int(np.ceil((largest_n - 1) / num_unique_n))
     node_counts = [n for n in range(1, largest_n + 1, step_size)]
     running_order = np.random.default_rng().permutation(np.repeat(range(len(node_counts)), repeats))
     recorded_runtimes = {n: [] for n in node_counts}
     for i in tqdm(running_order):
         recorded_runtimes[node_counts[i]].append(Timer(
-            lambda: solve(grid_from_graph(nx.wheel_graph(node_counts[i])), verbosity=0)
+            lambda: solve(grid_from_graph(
+                (nx.cycle_graph if graph_type == "cycle" else
+                 nx.circular_ladder_graph if graph_type == "circular ladder" else
+                 nx.complete_graph if graph_type == "complete" else None)(node_counts[i])), verbosity=0)
         ).timeit(number=1))
     runtimes = [np.median(recorded_runtimes[n]) for n in node_counts]
-    save_and_display_benchmark(node_counts, runtimes)
+    save_and_display_benchmark(node_counts, runtimes, graph_type)
 
 
-def load_benchmark():
-    with open('output/benchmark_scores.json', 'r') as file:
+def load_benchmark(graph_type):
+    with open(f"benchmarks/{graph_type}.json", "r") as file:
         results = json.load(file)
         del results["quadratic_fit"]
     node_counts = [int(n) for n in results.keys()]
     runtimes = [float(v) for v in results.values()]
-    save_and_display_benchmark(node_counts, runtimes)
+    save_and_display_benchmark(node_counts, runtimes, graph_type)
 
 
 #G = fetch_l2rpn_graph("l2rpn_case14_sandbox")
-# flow, _, _ = solve(grid_from_graph(nx.wheel_graph(2)), verbosity=3)
+# solve(grid_from_graph(nx.complete_graph(5)), verbosity=3)
+# solve(grid_from_graph(nx.cycle_graph(25)), verbosity=0)
+# solve(grid_from_graph(nx.circular_ladder_graph(10)), verbosity=3)
 # solve(big_funky_instance(), verbosity=2)
 # solve(realistic_instance(kV=500))
-solve(trivial_instance2(), verbosity=3)
-# benchmark()
-# load_benchmark()
+# solve(trivial_instance2(), verbosity=3)
+benchmark(graph_type="cycle")
+# load_benchmark(graph_type="circular ladder")
