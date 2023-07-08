@@ -252,13 +252,33 @@ def ieee(capacity, resistance, supplies, demands, prodcpus, env_name="l2rpn_case
     return make_grid(capacity, resistance, supplies, demands, prodcpus, rawG)
 
 
-def trivial_instance(directed=False):
-    G = (nx.DiGraph if directed else nx.Graph)(
-        sources=[("a", {"c": [(2, 1), (2, 2)]})], sinks=[("b1", {"d": 1}), ("b2", {"d": 1})], capacity=2, supplies={"a": 4})
+def trivial_instance():
+    G = nx.Graph(sources=[("a", {"c": [(2, 1), (2, 2)]})],
+                 sinks=[("b1", {"d": 1}), ("b2", {"d": 1})], capacity=2, supplies={"a": 4})
     G.add_nodes_from(G.graph["sources"])
     G.add_nodes_from(G.graph["sinks"])
     G.add_edge("a", "b1", r=1e-1, u=2)
     G.add_edge("a", "b2", r=1e-1, u=2)
+    return G
+
+
+def alg2_instance():
+    G = nx.DiGraph(sources=[("s1", {"c": [(2, 1), (2, 2)]}), ("s2", {"c": [(1, 1)]})],
+                 sinks=[("d1", {"d": 1}), ("d2", {"d": 1})], capacity=2, supplies={"s1": 4, "s2": 1})
+    G.add_nodes_from(G.graph["sources"])
+    G.add_nodes_from(G.graph["sinks"])
+    G.add_edge("s1", "d1", r=1e-1, u=2)
+    G.add_edge("s2", "d2", r=1e-1, u=2)
+    return G
+
+
+def alg3_instance():
+    G = nx.Graph(sources=[("a", {"cr": [(1, 1), (1, 1)]}), ("b", {"c": [(1, 1)]})],
+                 sinks=[("c", {"d": 1})], capacity=2, supplies={"a": 2, "b": 1})
+    G.add_nodes_from(G.graph["sources"])
+    G.add_nodes_from(G.graph["sinks"])
+    G.add_edge("a", "c", r=1e-1, u=2)
+    G.add_edge("b", "c", r=1e-1, u=2)
     return G
 
 
@@ -324,10 +344,10 @@ def big_funky_instance():
 
 def grid_from_graph(graph):
     """graph: networkx graph with numbers as node names"""
-    capacity = {arc: np.random.randint(0, 200) for arc in graph.edges}
+    capacity = {arc: np.random.rand() * 200 for arc in graph.edges}
     resistance = {arc: 10 ** -(2 + 2 * np.random.rand()) for arc in graph.edges}
-    demands = {node: np.random.randint(0, 50) for node in graph.nodes}
-    supplies = {node: np.random.randint(50, 100) for node in graph.nodes}
+    demands = {node: np.random.rand() * 50 for node in graph.nodes}
+    supplies = {node: 50 + np.random.rand() * 50 for node in graph.nodes}
     prodcpus = {node: [(supplies[node], node + 1)] for node in graph.nodes}
     return make_grid(capacity, resistance, supplies, demands, prodcpus, graph)
 
@@ -383,11 +403,16 @@ def load_benchmark(graph_type):
 
 #G = fetch_l2rpn_graph("l2rpn_case14_sandbox")
 # solve(grid_from_graph(nx.complete_graph(5)), verbosity=3)
-nx.draw_networkx(nx.cycle_graph(25))
-plt.plot()
-plot_multigraph(algorithm2(trivial_instance(directed=True), T=1), f"plots/alg2_trivial_instance_{time.time()}.pdf")
-# solve(grid_from_graph(nx.circular_ladder_graph(10)), verbosity=3)
-# solve(big_funky_instance(), verbosity=2)
+# nx.draw_networkx(alg2_instance())
+# plt.savefig(f"plots/alg2_instance_{time.time()}.pdf", bbox_inches='tight')
+# plt.show()
+# plot_multigraph(algorithm2(alg2_instance(), T=1), f"plots/alg2_on_alg2_instance_{time.time()}.pdf")
+# nx.draw_networkx(alg3_instance())
+# plt.savefig(f"plots/alg3_instance_{time.time()}.pdf", bbox_inches='tight')
+# plt.show()
+# plot_multigraph(algorithm3(alg3_instance()), f"plots/alg3_on_alg3_instance_{time.time()}.pdf")
+# solve(grid_from_graph(nx.wheel_graph(200)), verbosity=1)
+solve(big_funky_instance(), verbosity=1)
 # solve(realistic_instance(kV=500))
 # solve(trivial_instance(), verbosity=3)
 # benchmark(graph_type="complete")
