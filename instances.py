@@ -25,28 +25,54 @@ def fetch_l2rpn_grid(name):
     return G
 
 
-def make_grid(capacity, resistance, supplies, demands, prodcpus, graph):
-    G = nx.Graph(sources=[], sinks=[], capacity=capacity, supplies=supplies)
+def make_grid(capacity, resistance, supplies, demands, prodcpus, graph, step_durations=(1,)):
+    G = nx.Graph(sources={}, sinks={}, capacity=capacity, supplies=supplies,
+                 step_durations=step_durations, k=len(step_durations))
     for node, attr in graph.nodes(data=True):
+        G.graph["sinks"][node] = demands[node]
         node_w_data = (node, {"d": demands[node]})
         if node in supplies.keys():
+            G.graph["sources"][node] = {"c": prodcpus[node]}
             node_w_data[1]["c"] = prodcpus[node]
-            G.graph["sources"].append(node_w_data)
-        G.graph["sinks"].append(node_w_data)
         G.add_nodes_from([node_w_data])
-    for u, v, attr in graph.edges(data=True):
-        arc_resistance = resistance[(u, v)] if type(resistance) is dict else resistance
-        arc_capacity = capacity[(u, v)] if type(capacity) is dict else capacity
-        arc_w_data = (u, v, {"r": arc_resistance, "u": arc_capacity})
-        G.add_edges_from([arc_w_data])
+    for edge in graph.edges:
+        arc_resistance = resistance[edge] if type(resistance) is dict else resistance
+        arc_capacity = capacity[edge] if type(capacity) is dict else capacity
+        G.add_edge(edge[0], edge[1], r=arc_resistance, u=arc_capacity)
     return G
 
 
-def ieee(capacity, resistance, supplies, demands, prodcpus, env_name="l2rpn_case14_sandbox"):
+def ieee(capacity, resistance, supplies, demands, prodcpus, step_durations, env_name="l2rpn_case14_sandbox"):
     env = grid2op.make(env_name)
     obs = env.reset()
     rawG = obs.get_energy_graph()
     return make_grid(capacity, resistance, supplies, demands, prodcpus, rawG)
+
+
+def attach_derived_attr(G):
+    G.graph["supplies"] = {name: sum(length for length, _ in attr["c"]) for name, attr in G.graph["sources"].items()}
+    G.graph["capacity"] = {(u, v): attr["u"] for u, v, attr in G.edges(data=True)}
+    G.graph["k"] = len(G.graph["step_durations"])
+
+
+def to_graph(sources, sinks, step_durations, edges, directed=False):
+    G = (nx.DiGraph if directed else nx.Graph)(edges, sources=sources, sinks=sinks, step_durations=step_durations)
+    for src, attr in sources.items():
+        G.add_nodes_from([(src, attr)])
+    for sink, d in sinks.items():
+        G.add_node(sink, d=d)
+    attach_derived_attr(G)
+    return G
+
+
+def trivial_instance0(directed=False):
+    # Exact feasibility requires cumulative supply of: (5-sqrt(15)) + (5-sqrt(5) + 2*(5-sqrt(15)) = 20-sqrt(5)-3sqrt(15)
+    # = 6.1449819838779596480530301319215249320606165245137017959663814562, so this instance should be barely infeasible
+    return to_graph(sources={"s": {"c": [(4, 1), (2.1449009999999999, 2)]}},
+                    sinks={"d": (1, 2, 1)},
+                    step_durations=(1, 1, 2),
+                    edges=[("s", "d", {"r": 1e-1, "u": 3})],
+                    directed=directed)
 
 
 def trivial_instance():
@@ -141,9 +167,10 @@ def big_funky_instance():
 
 def grid_from_graph(graph):
     """graph: networkx graph with numbers as node names"""
+    nx.relabel_nodes(graph, {node: str(node) for node in graph.nodes}, copy=False)
     capacity = {arc: np.random.rand() * 200 for arc in graph.edges}
     resistance = {arc: 10 ** -(2 + 2 * np.random.rand()) for arc in graph.edges}
-    demands = {node: np.random.rand() * 50 for node in graph.nodes}
-    supplies = {node: 50 + np.random.rand() * 50 for node in graph.nodes}
-    prodcpus = {node: [(supplies[node], node + 1)] for node in graph.nodes}
-    return make_grid(capacity, resistance, supplies, demands, prodcpus, graph)
+    demands = {node: [np.random.rand() * 10 for _ in range(4)] for node in graph.nodes}
+    supplies = {node: 70 + np.random.rand() * 70 for node in graph.nodes}
+    prodcpus = {node: [(supplies[node]*2/3, np.random.rand()), (supplies[node]/3, 1)] for node in graph.nodes}
+    return make_grid(capacity, resistance, supplies, demands, prodcpus, graph, step_durations=[1, 2, 3, 1])

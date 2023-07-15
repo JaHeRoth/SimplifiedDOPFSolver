@@ -1,10 +1,9 @@
 # CUSTOM
 .idea
-qcqp.lp
-linear_model.lp
 plots
 output
 benchmarks
+Playground.ipynb
 
 
 # Created by .ignore support plugin (hsz.mobi)
