@@ -50,7 +50,10 @@ def ieee(capacity, resistance, supplies, demands, prodcpus, step_durations, env_
 
 
 def attach_derived_attr(G):
-    G.graph["supplies"] = {name: sum(length for length, _ in attr["c"]) for name, attr in G.graph["sources"].items()}
+    # TODO: Very unsure about this for cr and for c with anything but k=T=1. Look into plot_flow function
+    #  (and sensibility of heatmaps on nodes in the first place now that we have multiple time-steps)
+    G.graph["supplies"] = {name: sum(length for length, _ in (attr["c"] if "c" in attr else attr["cr"]))
+                           for name, attr in G.graph["sources"].items()}
     G.graph["capacity"] = {(u, v): attr["u"] for u, v, attr in G.edges(data=True)}
     G.graph["k"] = len(G.graph["step_durations"])
 
@@ -65,7 +68,7 @@ def to_graph(sources, sinks, step_durations, edges, directed=False):
     return G
 
 
-def trivial_instance0(directed=False):
+def trivial_instance(directed=False):
     # Exact feasibility requires cumulative supply of: (5-sqrt(15)) + (5-sqrt(5) + 2*(5-sqrt(15)) = 20-sqrt(5)-3sqrt(15)
     # = 6.1449819838779596480530301319215249320606165245137017959663814562, so this instance should be barely infeasible
     return to_graph(sources={"s": {"c": [(4, 1), (2.1449009999999999, 2)]}},
@@ -75,34 +78,11 @@ def trivial_instance0(directed=False):
                     directed=directed)
 
 
-def trivial_instance():
-    G = nx.Graph(sources=[("a", {"c": [(2, 1), (2, 2)]})],
-                 sinks=[("b1", {"d": 1}), ("b2", {"d": 1})], capacity=2, supplies={"a": 4})
-    G.add_nodes_from(G.graph["sources"])
-    G.add_nodes_from(G.graph["sinks"])
-    G.add_edge("a", "b1", r=1e-1, u=2)
-    G.add_edge("a", "b2", r=1e-1, u=2)
-    return G
-
-
-def alg2_instance():
-    G = nx.DiGraph(sources=[("s1", {"c": [(2, 1), (2, 2)]}), ("s2", {"c": [(1, 1)]})],
-                 sinks=[("d1", {"d": 1}), ("d2", {"d": 1})], capacity=2, supplies={"s1": 4, "s2": 1})
-    G.add_nodes_from(G.graph["sources"])
-    G.add_nodes_from(G.graph["sinks"])
-    G.add_edge("s1", "d1", r=1e-1, u=2)
-    G.add_edge("s2", "d2", r=1e-1, u=2)
-    return G
-
-
 def alg3_instance():
-    G = nx.Graph(sources=[("a", {"cr": [(1, 1), (1, 1)]}), ("b", {"c": [(1, 1)]})],
-                 sinks=[("c", {"d": 1})], capacity=2, supplies={"a": 2, "b": 1})
-    G.add_nodes_from(G.graph["sources"])
-    G.add_nodes_from(G.graph["sinks"])
-    G.add_edge("a", "c", r=1e-1, u=2)
-    G.add_edge("b", "c", r=1e-1, u=2)
-    return G
+    return to_graph(sources={"a": {"cr": [(1, 1), (1, 1)]}, "b": {"c": [(1, 1)]}},
+                    sinks={"c": (1,)},
+                    step_durations=(1,),
+                    edges=[("a", "c", {"r": 1e-1, "u": 2}), ("b", "c", {"r": 1e-1, "u": 2})])
 
 
 def realistic_instance(kV=-2):

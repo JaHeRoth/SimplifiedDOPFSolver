@@ -25,8 +25,7 @@ def save_and_display_benchmark(node_counts, runtimes, graph_type, dirname):
     polyline = np.linspace(node_counts[0], node_counts[-1], 100)
     plt.plot(polyline, quadratic_fit(polyline), label=results["quadratic_fit"])
     plt.title("Total runtime (transforming graph, building QCQP, solving QCQP,\n"
-              f"merging anti-parallel flows) for {graph_type} graph of "
-              f"{'2n' if graph_type == 'circular ladder' else 'n'} nodes")
+              f"merging anti-parallel flows) for {graph_type} graph of n nodes")
     plt.xlabel("n")
     plt.ylabel("s")
     plt.legend()
@@ -34,18 +33,22 @@ def save_and_display_benchmark(node_counts, runtimes, graph_type, dirname):
     plt.show()
 
 
-def benchmark(graph_type, largest_n, repeats=5, num_unique_n=30, dirname="benchmarks"):
-    node_counts = np.linspace(1, largest_n, num_unique_n, dtype=int)
-    running_order = np.random.default_rng().permutation(np.repeat(range(len(node_counts)), repeats))
-    recorded_runtimes = {n: [] for n in node_counts}
+def benchmark(graph_type, max_nodes, repeats=5, num_unique_n=30, dirname="benchmarks"):
+    nodes_per_n = 2 if graph_type == 'circular ladder' else 1
+    n_counts = np.linspace(1, int(max_nodes // nodes_per_n), num_unique_n, dtype=int)
+    node_counts = n_counts * nodes_per_n
+    running_order = np.random.default_rng().permutation(np.repeat(range(len(n_counts)), repeats))
+    recorded_runtimes = {node_count: [] for node_count in node_counts}
     for i in tqdm(running_order):
         recorded_runtimes[node_counts[i]].append(Timer(
             lambda: solve(grid_from_graph(
                 (nx.cycle_graph if graph_type == "cycle" else
                  nx.circular_ladder_graph if graph_type == "circular ladder" else
-                 nx.complete_graph if graph_type == "complete" else None)(node_counts[i])), verbosity=0)
+                 nx.complete_graph if graph_type == "complete" else None)(
+                    n_counts[i])
+            ), verbosity=0)
         ).timeit(number=1))
-    runtimes = [np.median(recorded_runtimes[n]) for n in node_counts]
+    runtimes = [np.median(recorded_runtimes[node_count]) for node_count in node_counts]
     save_and_display_benchmark(node_counts, runtimes, graph_type, dirname)
 
 

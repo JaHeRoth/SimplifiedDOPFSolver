@@ -22,9 +22,9 @@ def find_optimal_flow(G, verbose=False):
         in_flows = [y[a] for a in G.in_edges(v)]
         out_flows = [x[a] for a in G.out_edges(v)]
         if v in G.graph["sinks"]:
-            qcqp.addConstr(quicksum(in_flows) == G.nodes[v]["d"])
+            qcqp.addConstr(quicksum(in_flows) >= G.nodes[v]["d"])
         elif v != "s*":
-            qcqp.addConstr(quicksum(in_flows) == quicksum(out_flows))
+            qcqp.addConstr(quicksum(in_flows) >= quicksum(out_flows))
     qcqp.modelSense = GRB.MINIMIZE
     qcqp.Params.LogToConsole = int(verbose)
     # qcqp.setObjective(obj)
@@ -143,11 +143,13 @@ def solve(G, verbosity=1):
     cost, flow = find_optimal_flow(Gpp, verbose=(verbosity > 1))
     if verbosity > 0:
         print(f"Defined and solved Gurobi program in {(datetime.now()-start).total_seconds():.2} seconds.")
+    start = datetime.now()
     merged_flow = to_original_graph_flow(flow, G)
     total_runtime = (datetime.now()-sstart).total_seconds()
     if verbosity > 0:
+        print(f"Flow merging ran in {(datetime.now()-start).total_seconds():.2} seconds.")
         print(f"Obtained merged flow. Total runtime: {total_runtime:.3f} seconds.")
         if verbosity > 1:
             print_flow(cost, merged_flow, merged=True)
-        plot_flow(merged_flow, G)
+            plot_flow(merged_flow, G)
     return cost, merged_flow, total_runtime
