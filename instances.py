@@ -148,8 +148,8 @@ def big_funky_instance():
 def grid_from_graph(graph):
     """graph: networkx graph with numbers as node names"""
     nx.relabel_nodes(graph, {node: str(node) for node in graph.nodes}, copy=False)
-    capacity = {arc: np.random.rand() * 200 for arc in graph.edges}
-    resistance = {arc: 10 ** -(2 + 2 * np.random.rand()) for arc in graph.edges}
+    capacity = {arc: np.random.rand() * 25 for arc in graph.edges}
+    resistance = {arc: 10 ** -(2 + 3 * np.random.rand()) for arc in graph.edges}
     demands = {node: [np.random.rand() * 10 for _ in range(4)] for node in graph.nodes}
     supplies = {node: 70 + np.random.rand() * 70 for node in graph.nodes}
     prodcpus = {node: [(supplies[node]*2/3, np.random.rand()), (supplies[node]/3, 1)] for node in graph.nodes}
