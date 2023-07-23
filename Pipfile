@@ -9,6 +9,7 @@ l2rpn-baselines = "*"
 jupyter = "*"
 matplotlib = "*"
 gurobipy = "*"
+scikit-learn = "*"
 
 [dev-packages]
 

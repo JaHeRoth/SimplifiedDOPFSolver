@@ -3,6 +3,7 @@ import os
 from math import ceil
 from pathlib import Path
 from timeit import Timer
+from sklearn.ensemble import IsolationForest
 
 import networkx as nx
 import numpy as np
@@ -42,7 +43,17 @@ def save_and_display_benchmark(node_counts, runtimes, graph_type, dirname):
     plt.show()
 
 
-def benchmark(graph_type, max_nodes, repeats=5, num_unique_n=30, dirname="benchmarks"):
+def record_runtime(graph_type, n):
+    return Timer(
+        lambda: solve(grid_from_graph(
+            (nx.cycle_graph if graph_type == "cycle" else
+             nx.circular_ladder_graph if graph_type == "circular ladder" else
+             nx.complete_graph if graph_type == "complete" else None)(n)
+        ), verbosity=0)
+    ).timeit(number=1)
+
+
+def record_runtimes(graph_type, max_nodes, repeats=5, num_unique_n=30):
     nodes_per_n = 2 if graph_type == 'circular ladder' else 1
     n_counts = np.linspace(1, max_nodes // nodes_per_n, num_unique_n, dtype=int)
     node_counts = n_counts * nodes_per_n
@@ -50,6 +61,15 @@ def benchmark(graph_type, max_nodes, repeats=5, num_unique_n=30, dirname="benchm
     recorded_runtimes = {node_count: [] for node_count in node_counts}
     for i in tqdm(running_order):
         recorded_runtimes[node_counts[i]].append(record_runtime(graph_type, n_counts[i]))
+    outdir = Path("output/raw")
+    os.makedirs(outdir, exist_ok=True)
+    with open(outdir / f"{graph_type}_{max_nodes}_{repeats}_{num_unique_n}.json", "w") as file:
+        json.dump({str(key): value for key, value in recorded_runtimes.items()}, file, indent=4)
+    return node_counts, recorded_runtimes
+
+
+def benchmark(graph_type, max_nodes, repeats=5, num_unique_n=30, dirname="benchmarks"):
+    node_counts, recorded_runtimes = record_runtimes(graph_type, max_nodes, repeats, num_unique_n)
     runtimes = [np.median(recorded_runtimes[node_count]) for node_count in node_counts]
     save_and_display_benchmark(node_counts, runtimes, graph_type, dirname)
 
@@ -61,16 +81,6 @@ def load_benchmark(graph_type, dirname="benchmarks"):
     node_counts = [int(n) for n in results.keys()]
     runtimes = [float(v) for v in results.values()]
     save_and_display_benchmark(node_counts, runtimes, graph_type, dirname)
-
-
-def record_runtime(graph_type, n):
-    return Timer(
-        lambda: solve(grid_from_graph(
-            (nx.cycle_graph if graph_type == "cycle" else
-             nx.circular_ladder_graph if graph_type == "circular ladder" else
-             nx.complete_graph if graph_type == "complete" else None)(n)
-        ), verbosity=0)
-    ).timeit(number=1)
 
 
 def sample_runtime(graph_type, max_nodes, nodes_per_n):
@@ -93,14 +103,33 @@ def sample_runtimes(graph_type, max_nodes, num_samples=ceil(120/0.95*10), dirnam
     df.to_csv(out_dir / "execution_times.csv")
 
 
-def remove_outliers(df):
+def record_structured_runtimes(graph_type, max_nodes, repeats_per_record=3, num_unique_n=10, num_qcoeffs=40, dirname="output"):
+    benchmarks = []
+    for i in range(num_qcoeffs):
+        node_counts, recorded_runtimes = record_runtimes(graph_type, max_nodes, repeats_per_record, num_unique_n)
+        runtimes = [float(np.median(recorded_runtimes[node_count])) for node_count in node_counts]
+        benchmarks.append({"node_count": node_counts.tolist(), "execution_time": runtimes})
+    out_dir = Path(dirname)
+    os.makedirs(out_dir, exist_ok=True)
+    with open(out_dir / f"execution_times.json", "w") as file:
+        json.dump(benchmarks, file, indent=4)
+
+
+def remove_top_percentile(df):
     # df = df.sort_values(by="node_count")
     df["bin"] = pd.cut(df.node_count, int(len(df) / 40))
     bin_percentiles = df.groupby("bin").execution_time.apply(lambda y: y.quantile(0.95))
     return df[df.execution_time <= df.bin.map(bin_percentiles).astype("float")].drop("bin", axis=1)
 
 
-def confidence_intervals(dirname="output"):
+def remove_outliers(df):
+    model = IsolationForest(contamination=0.05)
+    model.fit(df)
+    outliers = model.predict(df)
+    return df[outliers == 1]
+
+
+def sampled_confidence_intervals(dirname="output"):
     df = remove_outliers(pd.read_csv(Path(dirname) / "execution_times.csv", index_col=0))
     df.to_csv(Path(dirname) / "filtered_execution_times.csv")
     sampled_dfs = np.array_split(df.sample(frac=1), 120)
@@ -120,3 +149,24 @@ def confidence_intervals(dirname="output"):
     # plt.show()
     # df.execution_time.hist(bins=50)
     # plt.show()
+
+
+def structured_confidence_intervals(dirname="output"):
+    with open(f"{dirname}/execution_times.json", "r") as file:
+        benchmarks = json.load(file)
+    recorded_qcoeffs = [
+        np.poly1d(np.polyfit(x=b["node_count"], y=b["execution_time"], deg=2))[0] for b
+        in benchmarks]
+    print(f"Empirical 95% confidence interval of quadratic coefficient: "
+          f"[{np.quantile(recorded_qcoeffs, 0.025):.4}, "
+          f"{np.quantile(recorded_qcoeffs, 0.975):.4}]")
+    # print(np.sort(recorded_qcoeffs))
+    # node_counts = np.array([b["node_count"] for b in benchmarks]).flatten()
+    # execution_times = np.array([b["execution_time"] for b in benchmarks]).flatten()
+    # plt.scatter(x=node_counts, y=execution_times)
+    # plt.show()
+    plt.hist(recorded_qcoeffs, bins=10, density=True)
+    plt.xlabel("Quadratic coefficient in best quadratic fit")
+    plt.savefig(f"{dirname}/qcoeffs_hist.pdf", bbox_inches='tight')
+    plt.show()
+

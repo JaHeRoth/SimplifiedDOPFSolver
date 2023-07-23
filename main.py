@@ -12,7 +12,8 @@ import grid2op
 import networkx as nx
 from tqdm import tqdm
 
-from benchmarking import benchmark, load_benchmark, sample_runtimes, confidence_intervals
+from benchmarking import benchmark, load_benchmark, sample_runtimes, sampled_confidence_intervals, \
+    record_structured_runtimes, structured_confidence_intervals
 from instances import grid_from_graph, trivial_instance, attach_derived_attr, alg3_instance
 from solving import solve, algorithm1, find_optimal_flow, algorithm3
 from outputting import plot_graph
@@ -44,6 +45,9 @@ from outputting import plot_graph
 # Gpp = algorithm1(Gp)
 # plot_graph(Gpp, "Gppp")
 # find_optimal_flow(Gpp, verbose=True)
-# It takes 8 hours to do 1264 runs at an average duration of 22.7848s, so thinking max_nodes=7521 should be safe
-# sample_runtimes("cycle", max_nodes=241)
-confidence_intervals()
+# It takes 8 hours to do 1264 runs at an average duration of 22.7848s, so thinking max_nodes=8001 should be safe
+# sample_runtimes("cycle", max_nodes=1001)
+# confidence_intervals()
+# Default parameters give 3*10*40=1200 runs, so can spend 24s per run and be done in 8h
+# record_structured_runtimes("cycle", 51)
+structured_confidence_intervals()
