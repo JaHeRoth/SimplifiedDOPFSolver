@@ -158,8 +158,8 @@ def structured_confidence_intervals(dirname="output"):
         np.poly1d(np.polyfit(x=b["node_count"], y=b["execution_time"], deg=2))[0] for b
         in benchmarks]
     print(f"Empirical 95% confidence interval of quadratic coefficient: "
-          f"[{np.quantile(recorded_qcoeffs, 0.025):.4}, "
-          f"{np.quantile(recorded_qcoeffs, 0.975):.4}]")
+          f"[{np.quantile(recorded_qcoeffs, 0.025):.2}, "
+          f"{np.quantile(recorded_qcoeffs, 0.975):.2}]")
     # print(np.sort(recorded_qcoeffs))
     # node_counts = np.array([b["node_count"] for b in benchmarks]).flatten()
     # execution_times = np.array([b["execution_time"] for b in benchmarks]).flatten()
@@ -168,5 +168,15 @@ def structured_confidence_intervals(dirname="output"):
     plt.hist(recorded_qcoeffs, bins=10, density=True)
     plt.xlabel("Quadratic coefficient in best quadratic fit")
     plt.savefig(f"{dirname}/qcoeffs_hist.pdf", bbox_inches='tight')
+    plt.show()
+    recorded_lcoeffs = [
+        np.poly1d(np.polyfit(x=b["node_count"], y=b["execution_time"], deg=2))[1] for b
+        in benchmarks]
+    print(f"Empirical 95% confidence interval of linear coefficient: "
+          f"[{np.quantile(recorded_lcoeffs, 0.025):.2}, "
+          f"{np.quantile(recorded_lcoeffs, 0.975):.2}]")
+    plt.hist(recorded_lcoeffs, bins=10, density=True)
+    plt.xlabel("Linear coefficient in best quadratic fit")
+    plt.savefig(f"{dirname}/lcoeffs_hist.pdf", bbox_inches='tight')
     plt.show()
 

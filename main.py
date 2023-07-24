@@ -49,5 +49,5 @@ from outputting import plot_graph
 # sample_runtimes("cycle", max_nodes=1001)
 # confidence_intervals()
 # Default parameters give 3*10*40=1200 runs, so can spend 24s per run and be done in 8h
-# record_structured_runtimes("cycle", 51)
+# record_structured_runtimes("cycle", 8001)
 structured_confidence_intervals()
