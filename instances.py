@@ -42,18 +42,15 @@ def make_grid(capacity, resistance, supplies, demands, prodcpus, graph, step_dur
     return G
 
 
-def ieee(capacity, resistance, supplies, demands, prodcpus, step_durations, env_name="l2rpn_case14_sandbox"):
+def ieee(capacity, resistance, supplies, demands, prodcpus, step_durations=(1,), env_name="l2rpn_case14_sandbox"):
     env = grid2op.make(env_name)
     obs = env.reset()
-    rawG = obs.get_energy_graph()
-    return make_grid(capacity, resistance, supplies, demands, prodcpus, rawG)
+    l2rpn_graph = obs.get_energy_graph()
+    graph = nx.relabel_nodes(nx.Graph(l2rpn_graph), lambda node: str(node))
+    return make_grid(capacity, resistance, supplies, demands, prodcpus, graph, step_durations=step_durations)
 
 
 def attach_derived_attr(G):
-    # TODO: Very unsure about this for cr and for c with anything but k=T=1. Look into plot_flow function
-    #  (and sensibility of heatmaps on nodes in the first place now that we have multiple time-steps)
-    G.graph["supplies"] = {name: sum(length for length, _ in (attr["c"] if "c" in attr else attr["cr"]))
-                           for name, attr in G.graph["sources"].items()}
     G.graph["capacity"] = {(u, v): attr["u"] for u, v, attr in G.edges(data=True)}
     G.graph["k"] = len(G.graph["step_durations"])
 
@@ -107,19 +104,19 @@ def realistic_instance(kV=-2):
         resistance = 95.93999999899998698 * 1e-6
     else:
         raise ValueError
-    supplies = {1: 300, 2: 500, 3: 55, 6: 300, 8: 700}
-    demands = {node: 1200 / 14 for node in range(14)}
-    cost_coeff = {1: (16.91, 0.00048), 2: (17.26, 0.00031), 3: (0, 0), 6: (16.6, 0.002), 8: (16.5, 0.00211)}
-    prodcpus = {key: [(supplies[key] / 2, cost_coeff[key][0]),
-                (supplies[key] / 2, cost_coeff[key][0] + cost_coeff[key][1] * (supplies[key] / 2) ** 2)]
-          for key in supplies.keys()}
+    supplies = {"1": 300, "2": 500, "3": 55, "6": 300, "8": 700}
+    demands = {str(node): [1200 / 14] for node in range(14)}
+    cost_coeff = {"1": (16.91, 0.00048), "2": (17.26, 0.00031), "3": (0, 0), "6": (16.6, 0.002), "8": (16.5, 0.00211)}
+    prodcpus = {key: [(supply / 2, cost_coeff[key][0]),
+                      (supply / 2, cost_coeff[key][0] + cost_coeff[key][1] * (supply / 2) ** 2)]
+                for key, supply in supplies.items()}
     return ieee(capacity, resistance, supplies, demands, prodcpus)
 
 
 def funky_instance():
     capacity = 200
     resistance = 5e-3
-    demands = {node: 50 for node in range(14)}
+    demands = {node: [50] for node in range(14)}
     supplies = {1: 500, 6: 500, 10: 500, 11: 500}
     prodcpus = {node: [(supplies[node], node+1)] for node in supplies.keys()}
     return ieee(capacity, resistance, supplies, demands, prodcpus)
@@ -129,9 +126,9 @@ def funky_instance2():
     node_count = 14
     capacity = 40
     resistance = 1e-2
-    demands = {node: 50 for node in range(node_count)}
-    supplies = {node: 100 for node in range(node_count)}
-    prodcpus = {node: [(supplies[node], node+1)] for node in range(node_count)}
+    demands = {str(node): 50 for node in range(node_count)}
+    supplies = {str(node): 100 for node in range(node_count)}
+    prodcpus = {str(node): [(supplies[str(node)], node+1)] for node in range(node_count)}
     return ieee(capacity, resistance, supplies, demands, prodcpus)
 
 
@@ -147,7 +144,7 @@ def big_funky_instance():
 
 def grid_from_graph(graph):
     """graph: networkx graph with numbers as node names"""
-    nx.relabel_nodes(graph, {node: str(node) for node in graph.nodes}, copy=False)
+    nx.relabel_nodes(graph, lambda node: str(node), copy=False)
     capacity = {arc: np.random.rand() * 25 for arc in graph.edges}
     resistance = {arc: 10 ** -(2 + 3 * np.random.rand()) for arc in graph.edges}
     demands = {node: [np.random.rand() * 10 for _ in range(4)] for node in graph.nodes}

@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from benchmarking import benchmark, load_benchmark, sample_runtimes, sampled_confidence_intervals, \
     record_structured_runtimes, structured_confidence_intervals
-from instances import grid_from_graph, trivial_instance, attach_derived_attr, alg3_instance
+from instances import grid_from_graph, trivial_instance, attach_derived_attr, alg3_instance, realistic_instance
 from solving import solve, algorithm1, find_optimal_flow, algorithm3
 from outputting import plot_graph
 
@@ -28,9 +28,10 @@ from outputting import plot_graph
 # plot_graph(G, "G")
 # Gp = algorithm3(G)
 # plot_graph(Gp, "Gp")
-# solve(grid_from_graph(nx.circular_ladder_graph(20)), verbosity=2)
+solve(grid_from_graph(nx.circular_ladder_graph(20)), verbosity=2)
 # solve(big_funky_instance(), verbosity=1)
-# solve(realistic_instance(kV=500))
+# solve(realistic_instance(kV=500), verbosity=2)
+# solve(realistic_instance(kV=-2), verbosity=2)
 # solve(trivial_instance(), verbosity=3)
 # benchmark(graph_type="cycle", max_nodes=int(2e4), repeats=5, num_unique_n=30)
 # benchmark(graph_type="circular ladder", max_nodes=int(2e4), repeats=5, num_unique_n=30)
@@ -50,4 +51,4 @@ from outputting import plot_graph
 # confidence_intervals()
 # Default parameters give 3*10*40=1200 runs, so can spend 24s per run and be done in 8h
 # record_structured_runtimes("cycle", 8001)
-structured_confidence_intervals()
+# structured_confidence_intervals()
