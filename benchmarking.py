@@ -7,9 +7,9 @@ from sklearn.ensemble import IsolationForest
 
 import networkx as nx
 import numpy as np
+from numpy.polynomial import Polynomial
 import pandas as pd
 from matplotlib import pyplot as plt
-from scipy.stats import stats
 from tqdm import tqdm
 
 from instances import grid_from_graph
@@ -18,22 +18,26 @@ from solving import solve
 
 def save_and_display_benchmark(node_counts, runtimes, graph_type, dirname):
     results = {int(node_counts[i]): runtimes[i] for i, n in enumerate(node_counts)}
-    qcoeffs = np.polyfit(x=np.array(node_counts), y=np.array(runtimes), deg=2)
-    quadratic_fit = np.poly1d(qcoeffs)
-    results["quadratic_fit"] = f"({qcoeffs[0]:.3}) x^2 + ({qcoeffs[1]:.3}) x + ({qcoeffs[2]:.3})"
+    qfit = Polynomial.fit(x=node_counts, y=runtimes, deg=2).convert()
+    results["quadratic_fit"] = f"({qfit.coef[2]:.2}) x^2 + ({qfit.coef[1]:.2}) x + ({qfit.coef[0]:.2})"
     out_dir = Path(dirname)
     os.makedirs(out_dir, exist_ok=True)
     with open(out_dir / f"{graph_type}.json", "w") as file:
         json.dump(results, file, indent=4)
-    plt.plot(node_counts, runtimes, "s", label="Measurements", zorder=3)
-    polyline = np.linspace(node_counts[0], node_counts[-1], 100)
-    plt.plot(polyline, quadratic_fit(polyline), "r", label=results["quadratic_fit"], zorder=1)
+    plt.plot(node_counts, runtimes, "s", label="Measurements", zorder=4)
+    plt.plot(node_counts, qfit(np.array(node_counts)), "r", label=results["quadratic_fit"], zorder=2)
     # cubic_fit = np.poly1d(np.polyfit(node_counts, runtimes, deg=3))
     # d, c, b, a = cubic_fit
     # plt.plot(polyline, cubic_fit(polyline), "k", label=f"({d:.2}) x^3 + ({c:.2}) x^2 + ({b:.2}) x + {a:.2}", zorder=2)
-    linear_fit = np.poly1d(np.polyfit(node_counts, runtimes, deg=1))
-    s, i = linear_fit
-    plt.plot(polyline, linear_fit(polyline), "k", label=f"({s:.4}) x + {i:.4}", zorder=2)
+    if graph_type == "complete":
+        pfit = Polynomial.fit(x=node_counts, y=runtimes, deg=4).convert()
+        plt.plot(node_counts, pfit(np.array(node_counts)), "k",
+                 label=f"({pfit.coef[4]:.2}) x^4 + ({pfit.coef[3]:.2}) x^3 + ({pfit.coef[2]:.2}) x^2 + "
+                       f"({pfit.coef[1]:.2}) x + {pfit.coef[0]:.2}", zorder=1)
+    else:
+        lfit = Polynomial.fit(x=node_counts, y=runtimes, deg=1).convert()
+        plt.plot(node_counts, lfit(np.array(node_counts)), "k",
+                 label=f"({lfit.coef[1]:.2}) x + {lfit.coef[0]:.2}", zorder=3)
     plt.title("Total execution time (transforming graph, building QCQP,\n"
               f" solving QCQP, merging anti-parallel flows) for {graph_type} graphs")
     plt.xlabel("Node count")
@@ -75,7 +79,7 @@ def benchmark(graph_type, max_nodes, repeats=5, num_unique_n=30, dirname="benchm
 
 
 def load_benchmark(graph_type, dirname="benchmarks"):
-    with open(f"benchmarks/{graph_type}.json", "r") as file:
+    with open(f"{dirname}/{graph_type}.json", "r") as file:
         results = json.load(file)
         del results["quadratic_fit"]
     node_counts = [int(n) for n in results.keys()]
@@ -154,24 +158,21 @@ def sampled_confidence_intervals(dirname="output"):
 def structured_confidence_intervals(dirname="output"):
     with open(f"{dirname}/execution_times.json", "r") as file:
         benchmarks = json.load(file)
+
     recorded_qcoeffs = [
-        np.poly1d(np.polyfit(x=b["node_count"], y=b["execution_time"], deg=2))[0] for b
-        in benchmarks]
+        Polynomial.fit(x=b["node_count"], y=b["execution_time"], deg=2).convert().coef[2] for b in benchmarks
+    ]
     print(f"Empirical 95% confidence interval of quadratic coefficient: "
           f"[{np.quantile(recorded_qcoeffs, 0.025):.2}, "
           f"{np.quantile(recorded_qcoeffs, 0.975):.2}]")
-    # print(np.sort(recorded_qcoeffs))
-    # node_counts = np.array([b["node_count"] for b in benchmarks]).flatten()
-    # execution_times = np.array([b["execution_time"] for b in benchmarks]).flatten()
-    # plt.scatter(x=node_counts, y=execution_times)
-    # plt.show()
     plt.hist(recorded_qcoeffs, bins=10, density=True)
     plt.xlabel("Quadratic coefficient in best quadratic fit")
     plt.savefig(f"{dirname}/qcoeffs_hist.pdf", bbox_inches='tight')
     plt.show()
+
     recorded_lcoeffs = [
-        np.poly1d(np.polyfit(x=b["node_count"], y=b["execution_time"], deg=2))[1] for b
-        in benchmarks]
+        Polynomial.fit(x=b["node_count"], y=b["execution_time"], deg=2).convert().coef[1] for b in benchmarks
+    ]
     print(f"Empirical 95% confidence interval of linear coefficient: "
           f"[{np.quantile(recorded_lcoeffs, 0.025):.2}, "
           f"{np.quantile(recorded_lcoeffs, 0.975):.2}]")
@@ -180,3 +181,25 @@ def structured_confidence_intervals(dirname="output"):
     plt.savefig(f"{dirname}/lcoeffs_hist.pdf", bbox_inches='tight')
     plt.show()
 
+    print(f"{sum(np.array(recorded_qcoeffs) > 0)}/{len(recorded_qcoeffs)} quadratic coefficients are positive.")
+    all_node_counts = np.array([b["node_count"] for b in benchmarks]).flatten()
+    all_execution_times = np.array([b["execution_time"] for b in benchmarks]).flatten()
+    plt.scatter(all_node_counts, all_execution_times, label="Measurements", zorder=3)
+    for b in benchmarks:
+        n_counts = b["node_count"]
+        plt.plot(n_counts, Polynomial.fit(x=n_counts, y=b["execution_time"], deg=2)(np.array(n_counts)), zorder=1)
+    plt.xlabel("Node count")
+    plt.ylabel("Execution time (seconds)")
+    plt.legend()
+    plt.savefig(f"{dirname}/scatter_with_quadratics.pdf", bbox_inches='tight')
+    plt.show()
+
+    node_counts = benchmarks[0]["node_count"]
+    execution_times = benchmarks[0]["execution_time"]
+    qfit = Polynomial.fit(x=node_counts, y=execution_times, deg=2, window=(node_counts[0], node_counts[-1]))
+    plt.plot(node_counts, execution_times, "s", label="Measurements", zorder=3)
+    plt.plot(node_counts, qfit(np.array(node_counts)), "r", label=str(qfit), zorder=1)
+    plt.legend()
+    plt.show()
+
+    print(np.mean(np.array(b["execution_time"][-1] for b in benchmarks)))
