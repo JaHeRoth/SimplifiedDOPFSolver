@@ -61,6 +61,7 @@ def plot_flow(flow, G):
 
 
 def plot_graph(graph, name):
+    # TODO: Instead have name be a graph property
     nx.draw_networkx(graph)
     plt.savefig(f"plots/{name}_{time.time()}.pdf", bbox_inches='tight')
     plt.show()

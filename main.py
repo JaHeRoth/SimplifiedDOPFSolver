@@ -4,19 +4,21 @@ import pathlib
 from datetime import datetime
 from timeit import Timer
 
-import numpy as np
-from matplotlib import pyplot as plt
-from gurobipy import Model, quicksum, GRB
-import time
-import grid2op
-import networkx as nx
-from tqdm import tqdm
+from benchmarking import plot_variances, find_variances, structured_confidence_intervals
 
-from benchmarking import benchmark, load_benchmark, sample_runtimes, sampled_confidence_intervals, \
-    record_structured_runtimes, structured_confidence_intervals
-from instances import grid_from_graph, trivial_instance, attach_derived_attr, alg3_instance, realistic_instance
-from solving import solve, algorithm1, find_optimal_flow, algorithm3
-from outputting import plot_graph
+# import numpy as np
+# from matplotlib import pyplot as plt
+# from gurobipy import Model, quicksum, GRB
+# import time
+# import grid2op
+# import networkx as nx
+# from tqdm import tqdm
+#
+# from benchmarking import benchmark, load_benchmark, sample_runtimes, sampled_confidence_intervals, \
+#     record_structured_runtimes, structured_confidence_intervals
+# from instances import grid_from_graph, trivial_instance, attach_derived_attr, alg3_instance, realistic_instance
+# from solving import solve, algorithm1, find_optimal_flow, algorithm3
+# from outputting import plot_graph
 
 # G = fetch_l2rpn_graph("l2rpn_case14_sandbox")
 # solve(grid_from_graph(nx.complete_graph(5)), verbosity=3)
@@ -44,11 +46,11 @@ from outputting import plot_graph
 # load_benchmark(graph_type="circular ladder", dirname="benchmarks/smaller instances")
 # load_benchmark(graph_type="complete", dirname="benchmarks/smaller instances")
 # load_benchmark(graph_type="cycle", dirname="benchmarks/huge instances")
-# solve(trivial_instance0(), verbosity=3)
-# Gp = trivial_instance0(directed=True)
+# solve(trivial_instance(), verbosity=3)
+# Gp = trivial_instance(directed=True)
 # plot_graph(Gp, "Gp")
 # Gpp = algorithm1(Gp)
-# plot_graph(Gpp, "Gppp")
+# plot_graph(Gpp, "Gpp")
 # find_optimal_flow(Gpp, verbose=True)
 # It takes 8 hours to do 1264 runs at an average duration of 22.7848s, so thinking max_nodes=8001 should be safe
 # sample_runtimes("cycle", max_nodes=1001)
@@ -56,3 +58,5 @@ from outputting import plot_graph
 # Default parameters give 3*10*40=1200 runs, so can spend 24s per run and be done in 8h
 # record_structured_runtimes("cycle", 8001)
 structured_confidence_intervals()
+plot_variances()
+# find_variances(graph_type="circular ladder", max_nodes=101)

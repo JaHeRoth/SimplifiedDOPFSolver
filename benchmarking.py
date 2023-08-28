@@ -4,6 +4,7 @@ from math import ceil
 from pathlib import Path
 from timeit import Timer
 from sklearn.ensemble import IsolationForest
+import statsmodels.api as sm
 
 import networkx as nx
 import numpy as np
@@ -155,12 +156,62 @@ def sampled_confidence_intervals(dirname="output"):
     # plt.show()
 
 
+def find_variances(graph_type, max_nodes, repeats_per_record=3, num_unique_n=25, reconds_per_n=100):
+    benchmarks = []
+    for i in range(reconds_per_n):
+        node_counts, recorded_runtimes = record_runtimes(graph_type, max_nodes, repeats_per_record, num_unique_n)
+        runtimes = [float(np.median(recorded_runtimes[node_count])) for node_count in node_counts]
+        benchmarks.append({"node_count": node_counts.tolist(), "execution_time": runtimes})
+    plot_variances(benchmarks)
+
+
+def plot_variances(benchmarks=None, dirname="output"):
+    if benchmarks is None:
+        with open(f"{dirname}/execution_times.json", "r") as file:
+            benchmarks = json.load(file)
+
+    node_counts = benchmarks[0]["node_count"]
+    execution_times_per_node_counts = [[b["execution_time"][i] for b in benchmarks] for i in range(len(node_counts))]
+    std_per_node_count = [np.array(times).std() for times in execution_times_per_node_counts]
+    plt.plot(node_counts, std_per_node_count)
+    plt.show()
+
+    all_node_counts = np.array([b["node_count"] for b in benchmarks]).flatten()
+    all_execution_times = np.array([b["execution_time"] for b in benchmarks]).flatten()
+    pd.DataFrame({"nodes": all_node_counts, "seconds": all_execution_times}).groupby("nodes").std().plot()
+    plt.show()
+    print("success")
+
+
+def estimate_weights(benchmarks, steps=1):
+    all_node_counts = np.array([b["node_count"] for b in benchmarks]).flatten()
+    all_execution_times = np.array([b["execution_time"] for b in benchmarks]).flatten()
+    df = pd.DataFrame({"nodes": all_node_counts, "seconds": all_execution_times})
+    min_nodes, max_nodes = all_node_counts.min(), all_node_counts.max()
+
+    weights = None
+    for _ in range(steps):
+        y_fit = Polynomial.fit(x=df.nodes, y=df.seconds, deg=2, w=weights, window=(min_nodes, max_nodes))
+        squared_residuals = (df.seconds - y_fit(df.nodes))**2
+        s_res_fit = Polynomial.fit(x=df.nodes, y=squared_residuals, deg=2, window=(min_nodes, max_nodes))
+        weights = 1/np.sqrt(s_res_fit(df.nodes))
+        print(weights)
+        plt.scatter(df.nodes, weights)
+        df.groupby("nodes").std().plot()
+        plt.show()
+    return weights
+
+
 def structured_confidence_intervals(dirname="output"):
     with open(f"{dirname}/execution_times.json", "r") as file:
         benchmarks = json.load(file)
+    dirname = "output/ols"
+    os.makedirs(dirname, exist_ok=True)
 
     recorded_qcoeffs = [
-        Polynomial.fit(x=b["node_count"], y=b["execution_time"], deg=2).convert().coef[2] for b in benchmarks
+        Polynomial.fit(
+            x=b["node_count"], y=b["execution_time"], deg=2, w=None  # 1/np.maximum(2000, np.array(b["node_count"]))
+        ).convert().coef[2] for b in benchmarks
     ]
     print(f"Empirical 95% confidence interval of quadratic coefficient: "
           f"[{np.quantile(recorded_qcoeffs, 0.025):.2}, "
@@ -169,9 +220,10 @@ def structured_confidence_intervals(dirname="output"):
     plt.xlabel("Quadratic coefficient in best quadratic fit")
     plt.savefig(f"{dirname}/qcoeffs_hist.pdf", bbox_inches='tight')
     plt.show()
+    print(np.sort(recorded_qcoeffs))
 
     recorded_lcoeffs = [
-        Polynomial.fit(x=b["node_count"], y=b["execution_time"], deg=2).convert().coef[1] for b in benchmarks
+        Polynomial.fit(x=b["node_count"], y=b["execution_time"], deg=2, w=None).convert().coef[1] for b in benchmarks
     ]
     print(f"Empirical 95% confidence interval of linear coefficient: "
           f"[{np.quantile(recorded_lcoeffs, 0.025):.2}, "
@@ -184,10 +236,10 @@ def structured_confidence_intervals(dirname="output"):
     print(f"{sum(np.array(recorded_qcoeffs) > 0)}/{len(recorded_qcoeffs)} quadratic coefficients are positive.")
     all_node_counts = np.array([b["node_count"] for b in benchmarks]).flatten()
     all_execution_times = np.array([b["execution_time"] for b in benchmarks]).flatten()
-    plt.scatter(all_node_counts, all_execution_times, label="Measurements", zorder=3)
+    plt.scatter(all_node_counts, all_execution_times, marker=".", label="Measurements", zorder=3)
     for b in benchmarks:
         n_counts = b["node_count"]
-        plt.plot(n_counts, Polynomial.fit(x=n_counts, y=b["execution_time"], deg=2)(np.array(n_counts)), zorder=1)
+        plt.plot(n_counts, Polynomial.fit(x=n_counts, y=b["execution_time"], deg=2, w=None)(np.array(n_counts)), zorder=1)
     plt.xlabel("Node count")
     plt.ylabel("Execution time (seconds)")
     plt.legend()
@@ -196,10 +248,8 @@ def structured_confidence_intervals(dirname="output"):
 
     node_counts = benchmarks[0]["node_count"]
     execution_times = benchmarks[0]["execution_time"]
-    qfit = Polynomial.fit(x=node_counts, y=execution_times, deg=2, window=(node_counts[0], node_counts[-1]))
+    qfit = Polynomial.fit(x=node_counts, y=execution_times, deg=2, w=None, window=(node_counts[0], node_counts[-1]))
     plt.plot(node_counts, execution_times, "s", label="Measurements", zorder=3)
     plt.plot(node_counts, qfit(np.array(node_counts)), "r", label=str(qfit), zorder=1)
     plt.legend()
     plt.show()
-
-    print(np.mean(np.array(b["execution_time"][-1] for b in benchmarks)))

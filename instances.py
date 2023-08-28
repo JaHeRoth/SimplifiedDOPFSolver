@@ -69,8 +69,8 @@ def trivial_instance(directed=False):
     # Exact feasibility requires cumulative supply of: (5-sqrt(15)) + (5-sqrt(5) + 2*(5-sqrt(15)) = 20-sqrt(5)-3sqrt(15)
     # = 6.1449819838779596480530301319215249320606165245137017959663814562, so this instance should be barely infeasible
     return to_graph(sources={"s": {"c": [(4, 1), (2.1449009999999999, 2)]}},
-                    sinks={"d": (1, 2, 1)},
-                    step_durations=(1, 1, 2),
+                    sinks={"d": (1, 2)},
+                    step_durations=(1, 1),
                     edges=[("s", "d", {"r": 1e-1, "u": 3})],
                     directed=directed)
 
