@@ -4,7 +4,7 @@ import pathlib
 from datetime import datetime
 from timeit import Timer
 
-from benchmarking import plot_variances, find_variances, structured_confidence_intervals
+from benchmarking import plot_variances, structured_confidence_intervals, run_and_display
 
 # import numpy as np
 # from matplotlib import pyplot as plt
@@ -57,6 +57,8 @@ from benchmarking import plot_variances, find_variances, structured_confidence_i
 # confidence_intervals()
 # Default parameters give 3*10*40=1200 runs, so can spend 24s per run and be done in 8h
 # record_structured_runtimes("cycle", 8001)
-structured_confidence_intervals()
-plot_variances()
+# structured_confidence_intervals()
+# plot_variances()
 # find_variances(graph_type="circular ladder", max_nodes=101)
+run_and_display(graph_type="circular ladder", max_nodes=22, num_runs=1, overwrite=False)
+# run_and_display(graph_type="circular ladder", max_nodes=22)
