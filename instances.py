@@ -27,8 +27,8 @@ def basic_instance():
         rcpus={"v": [(1, 1), (2, 2)]},
         ccpus={"u": [(1, 1), (2, 2)]},
         demands={"u": (1,), "v": (2,)},
-        resistances={("a", "c"): 1e-1},
-        capacities={("a", "c"): 2})
+        resistances={("u", "v"): 1e-1},
+        capacities={("u", "v"): 2})
 
 
 def ieee14(kilo_volts=-2):
@@ -114,8 +114,6 @@ def from_attributes(capacities: dict, resistances: dict, demands: dict, rcpus=No
         graph.add_node(name, c=costs, d=no_demand)
     for name, demand in demands.items():
         graph.add_node(name, d=demand)
-        if name not in rcpus.keys() and name not in ccpus.keys():
-            graph.nodes[name]["c"] = no_supply_cpu
     for name, resistance in resistances.items():
         graph.add_edge(name[0], name[1], r=resistance, u=capacities[name])
     return graph

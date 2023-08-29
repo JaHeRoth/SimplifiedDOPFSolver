@@ -2,6 +2,7 @@ import os
 import re
 from datetime import datetime
 
+import networkx
 import networkx as nx
 from gurobipy import Model, GRB, quicksum
 
@@ -39,8 +40,8 @@ def find_optimal_flow(G, verbose=False):
 
 
 def split_sources_and_time_expand(G):
-    sources, sinks, arcs, k, step_durations =\
-        G.graph["sources"], G.graph["sinks"], G.edges, G.graph["k"], G.graph["step_durations"]
+    sources, sinks, arcs, k, step_lengths =\
+        G.graph["sources"], G.graph["sinks"], G.edges, G.graph["k"], G.graph["step_lengths"]
     Gp = nx.DiGraph(sinks=set(), name="Gpp")
     for i in range(k):
         for u, v, attr in arcs(data=True):
@@ -51,49 +52,45 @@ def split_sources_and_time_expand(G):
     for src in sources:
         for j, (length, cost) in enumerate(G.nodes[src]["c"]):
             Gp.add_edge("s*", f"{src}|{j}", c=cost, mu=1, r=0, u=length)
-            for i, step_duration in enumerate(step_durations):
+            for i, step_duration in enumerate(step_lengths):
                 Gp.add_edge(f"{src}|{j}", f"{src}'{i}", c=cost, mu=1/step_duration, r=0, u=length)
     return Gp
 
 
-def split_nodes_and_direct_arcs(G):
-    # Steps 1 & 4
-    src_connected = set(nx.multi_source_dijkstra_path_length(
-        G, G.graph["sources"].keys()).keys())
-    sink_connected = set(nx.multi_source_dijkstra_path_length(
-        G, G.graph["sinks"].keys()).keys())
-    relevant = src_connected.intersection(sink_connected)
-    Gp = G.subgraph(relevant).to_directed()
+def split_nodes_and_direct_arcs(G: networkx.Graph):
+    # Step 1
+    Gp: networkx.DiGraph = G.to_directed()
     Gp.graph["name"] = "Gp"
     Gp.graph["sources"] = set()
     Gp.graph["sinks"] = set()
     # Step 2
-    for src, attr in G.graph["sources"].items():
+    for v, attr in G.nodes(data=True):
         if "cr" in attr:
             # Step 2a
             for i, (length, cost) in enumerate(attr["cr"]):
-                node = f"{src}s{i}"
-                Gp.graph["sources"].add(node)
-                Gp.add_node(node, c=[(length, cost)])
-                Gp.add_edge(node, src, r=0, u=length)
-            del Gp.nodes[src]["cr"]
-        else:
+                src = f"{v}s{i}"
+                Gp.graph["sources"].add(src)
+                Gp.add_node(src, c=[(length, cost)])
+                Gp.add_edge(src, v, r=0, u=length)
+            del Gp.nodes[v]["cr"]
+        elif "c" in attr:
             # Step 2b
-            node = f"{src}s"
-            Gp.graph["sources"].add(node)
-            Gp.add_node(node, c=attr["c"])
+            src = f"{v}s"
+            Gp.graph["sources"].add(src)
+            Gp.add_node(src, c=attr["c"])
             csupply = sum(l for l, _ in attr["c"])
-            Gp.add_edge(node, src, r=0, u=csupply)
-            del Gp.nodes[src]["c"]
-    # Step 3
-    for sink, d in G.graph["sinks"].items():
-        node = f"{sink}d"
-        Gp.graph["sinks"].add(node)
-        Gp.add_node(node, d=d) # TODO: Ensure this only adds attribute to node if it already exists
+            Gp.add_edge(src, v, r=0, u=csupply)
+            del Gp.nodes[v]["c"]
+        sink = f"{v}d"
+        Gp.graph["sinks"].add(sink)
+        Gp.add_node(sink, d=attr["d"])
         # Setting this arc capacity to the demand of the sink would break strict feasibility, so we make it larger
-        Gp.add_edge(sink, node, r=0, u=float("inf"))
-        del Gp.nodes[sink]["d"]
-    return Gp
+        Gp.add_edge(v, sink, r=0, u=float("inf"))
+        del Gp.nodes[v]["d"]
+    # Step 3 (ish: here only requiring that node is part of S-D walk, instead of S-D path as in thesis)
+    src_connected = nx.multi_source_dijkstra_path_length(Gp, Gp.graph["sources"]).keys()
+    sink_connected = nx.multi_source_dijkstra_path_length(Gp.reverse(), Gp.graph["sinks"]).keys()
+    return Gp.subgraph(src_connected & sink_connected)
 
 
 def to_original_graph_flow(full_flow, G):
