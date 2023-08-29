@@ -14,7 +14,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
-from instances import grid_from_graph
+from instances import from_graph
 from solving import solve
 
 
@@ -66,13 +66,12 @@ def record_runtimes(graph_type, max_nodes, pbar, repeats=5, num_unique_n=30):
 
 
 def record_runtime(graph_type, n):
-    return Timer(
-        lambda: solve(grid_from_graph(
+    graph = from_graph(
             (nx.cycle_graph if graph_type == "cycle" else
              nx.circular_ladder_graph if graph_type == "circular ladder" else
              nx.complete_graph if graph_type == "complete" else None)(n)
-        ), verbosity=0)
-    ).timeit(number=1)
+        )
+    return Timer(lambda: solve(graph, verbosity=0)).timeit(number=1)
 
 
 def retrieve(graph_type, max_nodes, repeats_per_record, num_unique_n, num_runs, timestamp=None):

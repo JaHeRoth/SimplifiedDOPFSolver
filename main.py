@@ -4,7 +4,7 @@ import pathlib
 from datetime import datetime
 from timeit import Timer
 
-from benchmarking import plot_variances, structured_confidence_intervals, run_and_display
+from benchmarking import run_and_display
 
 # import numpy as np
 # from matplotlib import pyplot as plt

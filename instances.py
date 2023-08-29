@@ -3,151 +3,119 @@ import networkx as nx
 import numpy as np
 
 
-def fetch_l2rpn_grid(name):
-    env = grid2op.make(name)
-    obs = env.reset()
-    rawG = obs.get_energy_graph()
-
-    G = nx.MultiGraph(sources=[], sinks=[])
-    for node, attr in rawG.nodes(data=True):
-        net_out = attr["p"] / 75 * 1e3
-        if net_out > 0:
-            node_w_data = (node, {"c": [(net_out / 2, 1), (net_out / 2, 2)]})
-            G.graph["sources"].append(node_w_data)
-            G.add_nodes_from([node_w_data])
-        if net_out < 0:
-            node_w_data = (node, {"d": -net_out / 2})
-            G.graph["sinks"].append(node_w_data)
-            G.add_nodes_from([node_w_data])
-    for u, v, attr in rawG.edges(data=True):
-        arc_w_data = (u, v, {"r": 1e-4, "u": attr["thermal_limit"] * 1e3})
-        G.add_edges_from([arc_w_data])
-    return G
-
-
-def make_grid(capacity, resistance, supplies, demands, prodcpus, graph, step_durations=(1,)):
-    G = nx.Graph(sources={}, sinks={}, capacity=capacity, supplies=supplies,
-                 step_durations=step_durations, k=len(step_durations))
-    for node, attr in graph.nodes(data=True):
-        G.graph["sinks"][node] = demands[node]
-        node_w_data = (node, {"d": demands[node]})
-        if node in supplies.keys():
-            G.graph["sources"][node] = {"c": prodcpus[node]}
-            node_w_data[1]["c"] = prodcpus[node]
-        G.add_nodes_from([node_w_data])
-    for edge in graph.edges:
-        arc_resistance = resistance[edge] if type(resistance) is dict else resistance
-        arc_capacity = capacity[edge] if type(capacity) is dict else capacity
-        G.add_edge(edge[0], edge[1], r=arc_resistance, u=arc_capacity)
-    return G
-
-
-def ieee(capacity, resistance, supplies, demands, prodcpus, step_durations=(1,), env_name="l2rpn_case14_sandbox"):
-    env = grid2op.make(env_name)
-    obs = env.reset()
-    l2rpn_graph = obs.get_energy_graph()
-    graph = nx.relabel_nodes(nx.Graph(l2rpn_graph), lambda node: str(node))
-    return make_grid(capacity, resistance, supplies, demands, prodcpus, graph, step_durations=step_durations)
-
-
-def attach_derived_attr(G):
-    G.graph["capacity"] = {(u, v): attr["u"] for u, v, attr in G.edges(data=True)}
-    G.graph["k"] = len(G.graph["step_durations"])
-
-
-def to_graph(sources, sinks, step_durations, edges, directed=False):
-    G = (nx.DiGraph if directed else nx.Graph)(edges, sources=sources, sinks=sinks, step_durations=step_durations)
-    for src, attr in sources.items():
-        G.add_nodes_from([(src, attr)])
-    for sink, d in sinks.items():
-        G.add_node(sink, d=d)
-    attach_derived_attr(G)
-    return G
-
-
-def trivial_instance(directed=False):
+def problem5_instance():
     # Exact feasibility requires cumulative supply of: (5-sqrt(15)) + (5-sqrt(5) + 2*(5-sqrt(15)) = 20-sqrt(5)-3sqrt(15)
     # = 6.1449819838779596480530301319215249320606165245137017959663814562, so this instance should be barely infeasible
-    return to_graph(sources={"s": {"c": [(4, 1), (2.1449009999999999, 2)]}},
-                    sinks={"d": (1, 2)},
-                    step_durations=(1, 1),
-                    edges=[("s", "d", {"r": 1e-1, "u": 3})],
-                    directed=directed)
+    return to_digraph(sources={"s": {"c": [(4, 1), (2.1449009999999999, 2)]}},
+                      sinks={"d": (1, 2)},
+                      step_durations=(1, 1),
+                      arcs=[("s", "d", {"r": 1e-1, "u": 3})])
 
 
-def alg3_instance():
-    return to_graph(sources={"a": {"cr": [(1, 1), (1, 1)]}, "b": {"c": [(1, 1)]}},
-                    sinks={"c": (1,)},
-                    step_durations=(1,),
-                    edges=[("a", "c", {"r": 1e-1, "u": 2}), ("b", "c", {"r": 1e-1, "u": 2})])
+def to_digraph(sources, sinks, step_durations, arcs):
+    return nx.DiGraph(nodes={**sources,**sinks},
+                      edges=arcs,
+                      sources=sources,
+                      sinks=sinks,
+                      step_durations=step_durations,
+                      capacity={(u, v): attr["u"] for u, v, attr in arcs},
+                      k=len(step_durations))
 
 
-def realistic_instance(kV=-2):
+def basic_instance():
+    return from_attributes(
+        rcpus={"v": [(1, 1), (2, 2)]},
+        ccpus={"u": [(1, 1), (2, 2)]},
+        demands={"u": (1,), "v": (2,)},
+        resistances={("a", "c"): 1e-1},
+        capacities={("a", "c"): 2})
+
+
+def ieee14(kilo_volts=-2):
     # Numbers copied or estimated from "Optimal Power Systems Planning for IEEE-14 Bus Test System Application"
-    # and Transmission Facts (by AMERICAN ELECTRIC POWER)
+    # and "Transmission Facts" (by AMERICAN ELECTRIC POWER)
     # Note how everything is in MW instead of in current, as these are anyway just a multiple when voltage is constant
     # kV=-1 represents the easiest case, while kV=-2 represents a barely feasible (rather: barely Gurobi-solvable) case
-    if kV == 345:
+    if kilo_volts == 345:
         capacity = 400
         resistance = 41.9 * 1e-6
-    elif kV == 500:
+    elif kilo_volts == 500:
         capacity = 900
         resistance = 11 * 1e-6
-    elif kV == 765:
+    elif kilo_volts == 765:
         capacity = 2200
         resistance = 3.4 * 1e-6
-    elif kV == -1:
+    elif kilo_volts == -1:
         capacity = 1e6
         resistance = 0
-    elif kV == -2:
+    elif kilo_volts == -2:
         capacity = 175
         resistance = 95.93999999899998698 * 1e-6
     else:
         raise ValueError
     supplies = {"1": 300, "2": 500, "3": 55, "6": 300, "8": 700}
-    demands = {str(node): [1200 / 14] for node in range(14)}
     cost_coeff = {"1": (16.91, 0.00048), "2": (17.26, 0.00031), "3": (0, 0), "6": (16.6, 0.002), "8": (16.5, 0.00211)}
-    prodcpus = {key: [(supply / 2, cost_coeff[key][0]),
-                      (supply / 2, cost_coeff[key][0] + cost_coeff[key][1] * (supply / 2) ** 2)]
-                for key, supply in supplies.items()}
-    return ieee(capacity, resistance, supplies, demands, prodcpus)
+    graph = fetch_l2rpn_graph()
+    return from_attributes(
+        capacities={edge: capacity for edge in graph.edges},
+        resistances={edge: resistance for edge in graph.edges},
+        demands={str(node): [1200 / 14] for node in range(14)},
+        ccpus={key: [(supply / 2, cost_coeff[key][0]),
+                     (supply / 2, cost_coeff[key][0] + cost_coeff[key][1] * (supply / 2) ** 2)]
+               for key, supply in supplies.items()}
+    )
 
 
-def funky_instance():
-    capacity = 200
-    resistance = 5e-3
-    demands = {node: [50] for node in range(14)}
-    supplies = {1: 500, 6: 500, 10: 500, 11: 500}
-    prodcpus = {node: [(supplies[node], node+1)] for node in supplies.keys()}
-    return ieee(capacity, resistance, supplies, demands, prodcpus)
+def ieee118():
+    return from_graph(fetch_l2rpn_graph(env_name="l2rpn_wcci_2022"))
 
 
-def funky_instance2():
-    node_count = 14
-    capacity = 40
-    resistance = 1e-2
-    demands = {str(node): 50 for node in range(node_count)}
-    supplies = {str(node): 100 for node in range(node_count)}
-    prodcpus = {str(node): [(supplies[str(node)], node+1)] for node in range(node_count)}
-    return ieee(capacity, resistance, supplies, demands, prodcpus)
+def fetch_l2rpn_graph(env_name="l2rpn_case14_sandbox"):
+    env = grid2op.make(env_name)
+    obs = env.reset()
+    l2rpn_graph = obs.get_energy_graph()
+    return nx.relabel_nodes(nx.Graph(l2rpn_graph), lambda node: str(node))
 
 
-def big_funky_instance():
-    node_count = 118
-    capacity = 200
-    resistance = 1e-3
-    demands = {node: 50 for node in range(node_count)}
-    supplies = {node: 100 for node in range(node_count)}
-    prodcpus = {node: [(supplies[node], node+1)] for node in range(node_count)}
-    return ieee(capacity, resistance, supplies, demands, prodcpus, env_name="l2rpn_wcci_2022")
-
-
-def grid_from_graph(graph):
+def from_graph(graph):
     """graph: networkx graph with numbers as node names"""
     nx.relabel_nodes(graph, lambda node: str(node), copy=False)
-    capacity = {arc: np.random.rand() * 25 for arc in graph.edges}
-    resistance = {arc: 10 ** -(2 + 3 * np.random.rand()) for arc in graph.edges}
-    demands = {node: [np.random.rand() * 10 for _ in range(4)] for node in graph.nodes}
     supplies = {node: 70 + np.random.rand() * 70 for node in graph.nodes}
-    prodcpus = {node: [(supplies[node]*2/3, np.random.rand()), (supplies[node]/3, 1)] for node in graph.nodes}
-    return make_grid(capacity, resistance, supplies, demands, prodcpus, graph, step_durations=[1, 2, 3, 1])
+    return from_attributes(
+        capacities={arc: np.random.rand() * 25 for arc in graph.edges},
+        resistances={arc: 10 ** -(2 + 3 * np.random.rand()) for arc in graph.edges},
+        demands={node: [np.random.rand() * 10 for _ in range(4)] for node in graph.nodes},
+        ccpus={node: [(supplies[node] * 2 / 3, np.random.rand()),
+                      (supplies[node] / 3, 1)] for node in graph.nodes},
+        step_lengths=[1, 2, 3, 1]
+    )
+
+
+def from_attributes(capacities: dict, resistances: dict, demands: dict, rcpus=None, ccpus=None, step_lengths=None):
+    k = len(iter(demands.values()).__next__())
+    if rcpus is None:
+        rcpus = {}
+    if ccpus is None:
+        ccpus = {}
+    if step_lengths is None:
+        step_lengths = tuple(np.repeat(1, k))
+
+    for d in demands.values():
+        assert len(d) == k, "All demands must be defined on all timesteps"
+    assert rcpus.keys().isdisjoint(ccpus.keys()), "A source should base its marginal costs on rate xor cumulative"
+    assert resistances.keys() == capacities.keys(), "Resistance and capacity must be provided for every edge"
+
+    no_demand = tuple(np.repeat(0, k))
+    no_supply_cpu = [(0, 0)]
+    graph = nx.Graph(capacities=capacities, k=k, step_lengths=step_lengths)
+    for name, costs in rcpus.items():
+        graph.add_node(name, cr=costs, d=no_demand)
+    for name, costs in ccpus.items():
+        graph.add_node(name, c=costs, d=no_demand)
+    for name, demand in demands.items():
+        graph.add_node(name, d=demand)
+        if name not in rcpus.keys() and name not in ccpus.keys():
+            graph.nodes[name]["c"] = no_supply_cpu
+    for name, resistance in resistances.items():
+        graph.add_edge(name[0], name[1], r=resistance, u=capacities[name])
+    return graph
