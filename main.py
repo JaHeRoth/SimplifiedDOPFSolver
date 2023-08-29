@@ -1,48 +1,21 @@
-from instances import basic_instance
-from algorithm.solving import solve
+import networkx as nx
+from matplotlib import pyplot as plt
 
-# solve(ieee14(), verbosity=3)
+from algorithm.outputting import print_flow
+from benchmarking import run_and_display
+from instances import basic_instance, ieee14, ieee118, problem5_instance
+from algorithm.solving import solve, split_sources_and_time_expand, find_optimal_flow
+
+solve(ieee14(kV=345), verbosity=2)
+solve(ieee118(), verbosity=2)
+try:
+    solve(ieee14(kV=-2), verbosity=2)
+except AttributeError:
+    pass
 solve(basic_instance(), verbosity=3)
-
-# G = fetch_l2rpn_graph("l2rpn_case14_sandbox")
-# solve(grid_from_graph(nx.complete_graph(5)), verbosity=3)
-# nx.draw_networkx(alg2_instance())
-# plt.savefig(f"plots/alg2_instance_{time.time()}.pdf", bbox_inches='tight')
-# plt.show()
-# plot_multigraph(algorithm2(alg2_instance(), T=1), f"plots/alg2_on_alg2_instance_{time.time()}.pdf")
-# G = alg3_instance()
-# plot_graph(G, "G")
-# Gp = algorithm3(G)
-# plot_graph(Gp, "Gp")
-# solve(grid_from_graph(nx.circular_ladder_graph(20)), verbosity=2)
-# solve(big_funky_instance(), verbosity=1)
-# solve(realistic_instance(kV=500), verbosity=1)
-# solve(realistic_instance(kV=-2), verbosity=1)
-# solve(trivial_instance(), verbosity=3)
-# benchmark(graph_type="cycle", max_nodes=int(2e4), repeats=5, num_unique_n=30)
-# benchmark(graph_type="circular ladder", max_nodes=int(2e4), repeats=5, num_unique_n=30)
-# benchmark(graph_type="cycle", max_nodes=int(1e5), repeats=3, num_unique_n=15)
-# benchmark(graph_type="complete", max_nodes=int(3e2), repeats=5, num_unique_n=30)
-# load_benchmark(graph_type="cycle", dirname="benchmarks/new plotting style")
-# load_benchmark(graph_type="circular ladder", dirname="benchmarks/new plotting style")
-# load_benchmark(graph_type="complete", dirname="benchmarks/new plotting style")
-# load_benchmark(graph_type="cycle", dirname="benchmarks/smaller instances")
-# load_benchmark(graph_type="circular ladder", dirname="benchmarks/smaller instances")
-# load_benchmark(graph_type="complete", dirname="benchmarks/smaller instances")
-# load_benchmark(graph_type="cycle", dirname="benchmarks/huge instances")
-# solve(trivial_instance(), verbosity=3)
-# Gp = trivial_instance(directed=True)
-# plot_graph(Gp, "Gp")
-# Gpp = algorithm1(Gp)
-# plot_graph(Gpp, "Gpp")
-# find_optimal_flow(Gpp, verbose=True)
-# It takes 8 hours to do 1264 runs at an average duration of 22.7848s, so thinking max_nodes=8001 should be safe
-# sample_runtimes("cycle", max_nodes=1001)
-# confidence_intervals()
-# Default parameters give 3*10*40=1200 runs, so can spend 24s per run and be done in 8h
-# record_structured_runtimes("cycle", 8001)
-# structured_confidence_intervals()
-# plot_variances()
-# find_variances(graph_type="circular ladder", max_nodes=101)
-# run_and_display(graph_type="circular ladder", max_nodes=22, num_runs=1, overwrite=False)
-# run_and_display(graph_type="circular ladder", max_nodes=22)
+print(problem5_instance())
+nx.draw_networkx(problem5_instance()); plt.show()
+nx.draw_networkx(split_sources_and_time_expand(problem5_instance())); plt.show()
+print_flow(*find_optimal_flow(split_sources_and_time_expand(problem5_instance())), merged=False)
+run_and_display(graph_type="circular ladder", max_nodes=101, num_runs=1)
+run_and_display(graph_type="circular ladder", max_nodes=22, overwrite=False)

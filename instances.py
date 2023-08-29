@@ -7,19 +7,20 @@ def problem5_instance():
     # Exact feasibility requires cumulative supply of: (5-sqrt(15)) + (5-sqrt(5) + 2*(5-sqrt(15)) = 20-sqrt(5)-3sqrt(15)
     # = 6.1449819838779596480530301319215249320606165245137017959663814562, so this instance should be barely infeasible
     return to_digraph(sources={"s": {"c": [(4, 1), (2.1449009999999999, 2)]}},
-                      sinks={"d": (1, 2)},
-                      step_durations=(1, 1),
+                      sinks={"d": {"d": (1, 2)}},
+                      step_lengths=(1, 1),
                       arcs=[("s", "d", {"r": 1e-1, "u": 3})])
 
 
-def to_digraph(sources: dict, sinks: dict, step_durations: tuple, arcs: list):
-    return nx.DiGraph(nodes={**sources,**sinks},
-                      edges=arcs,
-                      sources=sources,
-                      sinks=sinks,
-                      step_durations=step_durations,
-                      capacity={(u, v): attr["u"] for u, v, attr in arcs},
-                      k=len(step_durations))
+def to_digraph(sources: dict, sinks: dict, step_lengths: tuple, arcs: list):
+    G = nx.DiGraph(sources=sources.keys(),
+                   sinks=sinks.keys(),
+                   step_lengths=step_lengths,
+                   capacity={(u, v): attr["u"] for u, v, attr in arcs},
+                   k=len(step_lengths))
+    G.add_nodes_from({**sources, **sinks}.items())
+    G.add_edges_from(arcs)
+    return G
 
 
 def basic_instance():
@@ -31,24 +32,24 @@ def basic_instance():
         capacities={("u", "v"): 2})
 
 
-def ieee14(kilo_volts=-2):
+def ieee14(kV: int):
     # Numbers copied or estimated from "Optimal Power Systems Planning for IEEE-14 Bus Test System Application"
     # and "Transmission Facts" (by AMERICAN ELECTRIC POWER)
     # Note how everything is in MW instead of in current, as these are anyway just a multiple when voltage is constant
     # kV=-1 represents the easiest case, while kV=-2 represents a barely feasible (rather: barely Gurobi-solvable) case
-    if kilo_volts == 345:
+    if kV == 345:
         capacity = 400
         resistance = 41.9 * 1e-6
-    elif kilo_volts == 500:
+    elif kV == 500:
         capacity = 900
         resistance = 11 * 1e-6
-    elif kilo_volts == 765:
+    elif kV == 765:
         capacity = 2200
         resistance = 3.4 * 1e-6
-    elif kilo_volts == -1:
+    elif kV == -1:
         capacity = 1e6
         resistance = 0
-    elif kilo_volts == -2:
+    elif kV == -2:
         capacity = 175
         resistance = 95.93999999899998698 * 1e-6
     else:

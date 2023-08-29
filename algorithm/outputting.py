@@ -3,6 +3,7 @@ import time
 from itertools import islice
 from pathlib import Path
 
+import gurobipy
 import networkx as nx
 from matplotlib import pyplot as plt
 
@@ -37,13 +38,14 @@ def plot_flow(flow: dict, G: nx.Graph):
         edge_labels = {edge: f"{round(use * 100)}%" for edge, use in edge_use.items()}
         plt.title(f"Edge utilization (teal = 0%, pink = 100%) at time-step {i + 1},\n"
                   f"with source nodes marked in green")
+        # G is used over Gi for positioning as this makes for a much more nicely and evenly spread-out graph
+        pos = nx.spring_layout(G)
         if len(Gi.nodes) < 20:
-            pos = nx.spring_layout(Gi)
             nx.draw_networkx(Gi, pos, node_color=node_color,
                              edge_cmap=plt.get_cmap("cool"), edge_color=edge_intensity, edge_vmin=0, edge_vmax=1)
             nx.draw_networkx_edge_labels(Gi, pos, edge_labels=edge_labels, font_size=8)
         else:
-            nx.draw_networkx(Gi, node_size=50, with_labels=False, node_color=node_color,
+            nx.draw_networkx(Gi, pos, node_size=50, with_labels=False, node_color=node_color,
                              edge_cmap=plt.get_cmap("cool"), edge_color=edge_intensity, edge_vmin=0, edge_vmax=1)
         safe_savefig("output/algorithm", f"{time.time()}.pdf")
         plt.show()
@@ -58,3 +60,9 @@ def plot_graph(graph: nx.Graph | nx.DiGraph):
 def safe_savefig(outdir: str, filename: str):
     os.makedirs(outdir, exist_ok=True)
     plt.savefig(Path(outdir) / filename, bbox_inches='tight')
+
+
+def safe_savemodel(outdir: str, model: gurobipy.Model):
+    os.makedirs(outdir, exist_ok=True)
+    model.write(f"{outdir}/model.lp")
+

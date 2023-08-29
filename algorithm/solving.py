@@ -5,47 +5,32 @@ import networkx
 import networkx as nx
 from gurobipy import Model, GRB, quicksum
 
-from algorithm.outputting import print_flow, plot_flow, plot_graph
+from algorithm.outputting import print_flow, plot_flow, plot_graph, safe_savemodel
 
 
-def find_optimal_flow(Gpp, verbose=False):
-    qcqp = Model(name="QCQP")
-    x, y = {}, {}
-    for a in Gpp.edges:
-        x[a] = qcqp.addVar(name=f"x_{a}", lb=0, obj=Gpp.edges[a]["c"])
-        y[a] = qcqp.addVar(name=f"y_{a}", lb=0)
-        qcqp.addConstr(Gpp.edges[a]["r"] * x[a] ** 2 - Gpp.edges[a]["mu"] * x[a] + y[a] <= 0)
-        qcqp.addConstr(x[a] <= Gpp.edges[a]["u"])
-    for v in Gpp.nodes:
-        in_flows = [y[a] for a in Gpp.in_edges(v)]
-        out_flows = [x[a] for a in Gpp.out_edges(v)]
-        if v in Gpp.graph["sinks"]:
-            qcqp.addConstr(quicksum(in_flows) >= Gpp.nodes[v]["d"])
-        elif v != "s*":
-            qcqp.addConstr(quicksum(in_flows) >= quicksum(out_flows))
-    qcqp.modelSense = GRB.MINIMIZE
-    qcqp.Params.LogToConsole = int(verbose)
-    qcqp.optimize()
-    variables = {var.VarName: var.X for var in qcqp.getVars()}
-    return qcqp.objVal, variables
-
-
-def split_sources_and_time_expand(Gp):
-    sources, sinks, arcs, k, step_lengths =\
-        Gp.graph["sources"], Gp.graph["sinks"], Gp.edges, Gp.graph["k"], Gp.graph["step_lengths"]
-    Gpp = nx.DiGraph(sinks=set(), name="Gpp")
-    for i in range(k):
-        for u, v, attr in arcs(data=True):
-            Gpp.add_edge(f"{u}'{i}", f"{v}'{i}", c=0, mu=1, r=attr["r"], u=attr["u"])
-        for sink in sinks:
-            Gpp.add_node(f"{sink}'{i}", d=Gp.nodes[sink]["d"][i])
-            Gpp.graph["sinks"].add(f"{sink}'{i}")
-    for src in sources:
-        for j, (length, cost) in enumerate(Gp.nodes[src]["c"]):
-            Gpp.add_edge("s*", f"{src}|{j}", c=cost, mu=1, r=0, u=length)
-            for i, step_length in enumerate(step_lengths):
-                Gpp.add_edge(f"{src}|{j}", f"{src}'{i}", c=cost, mu=1/step_length, r=0, u=length)
-    return Gpp
+def solve(G, verbosity=1):
+    sstart = datetime.now()
+    Gp = split_nodes_and_direct_arcs(G)
+    Gpp = split_sources_and_time_expand(Gp)
+    if verbosity > 0:
+        print_with_seconds_elapsed_since("Graph modifications algorithm ran in ", sstart)
+    if verbosity > 2:
+        plot_graph(G)
+        plot_graph(Gp)
+        plot_graph(Gpp)
+    start = datetime.now()
+    cost, flow = find_optimal_flow(Gpp, verbose=(verbosity > 1))
+    if verbosity > 0:
+        print_with_seconds_elapsed_since("Defined and solved Gurobi program in ", start)
+    start = datetime.now()
+    merged_flow = to_original_graph_flow(flow, G)
+    if verbosity > 0:
+        print_with_seconds_elapsed_since("Flow merging ran in ", start)
+        print_with_seconds_elapsed_since("Obtained merged flow. Total runtime: ", sstart)
+    if verbosity > 1:
+        print_flow(cost, merged_flow, merged=True)
+        plot_flow(merged_flow, G)
+    return cost, merged_flow
 
 
 def split_nodes_and_direct_arcs(G: networkx.Graph):
@@ -84,6 +69,51 @@ def split_nodes_and_direct_arcs(G: networkx.Graph):
     return Gp.subgraph(src_connected & sink_connected)
 
 
+def split_sources_and_time_expand(Gp):
+    sources, sinks, arcs, k, step_lengths =\
+        Gp.graph["sources"], Gp.graph["sinks"], Gp.edges, Gp.graph["k"], Gp.graph["step_lengths"]
+    Gpp = nx.DiGraph(sinks=set(), name="Gpp")
+    for i in range(k):
+        for u, v, attr in arcs(data=True):
+            Gpp.add_edge(f"{u}'{i}", f"{v}'{i}", c=0, mu=1, r=attr["r"], u=attr["u"])
+        for sink in sinks:
+            Gpp.add_node(f"{sink}'{i}", d=Gp.nodes[sink]["d"][i])
+            Gpp.graph["sinks"].add(f"{sink}'{i}")
+    for src in sources:
+        for j, (length, cost) in enumerate(Gp.nodes[src]["c"]):
+            Gpp.add_edge("s*", f"{src}|{j}", c=cost, mu=1, r=0, u=length)
+            for i, step_length in enumerate(step_lengths):
+                Gpp.add_edge(f"{src}|{j}", f"{src}'{i}", c=cost, mu=1/step_length, r=0, u=length)
+    return Gpp
+
+
+def find_optimal_flow(Gpp, verbose=False):
+    qcqp = Model(name="QCQP")
+    x, y = {}, {}
+    for a in Gpp.edges:
+        x[a] = qcqp.addVar(name=f"x_{a}", lb=0, obj=Gpp.edges[a]["c"])
+        y[a] = qcqp.addVar(name=f"y_{a}", lb=0)
+        qcqp.addConstr(Gpp.edges[a]["r"] * x[a] ** 2 - Gpp.edges[a]["mu"] * x[a] + y[a] <= 0)
+        qcqp.addConstr(x[a] <= Gpp.edges[a]["u"])
+    for v in Gpp.nodes:
+        in_flows = [y[a] for a in Gpp.in_edges(v)]
+        out_flows = [x[a] for a in Gpp.out_edges(v)]
+        if v in Gpp.graph["sinks"]:
+            qcqp.addConstr(quicksum(in_flows) >= Gpp.nodes[v]["d"])
+        elif v != "s*":
+            qcqp.addConstr(quicksum(in_flows) >= quicksum(out_flows))
+    qcqp.modelSense = GRB.MINIMIZE
+    qcqp.Params.LogToConsole = int(verbose)
+    qcqp.optimize()
+    try:
+        variables = {var.VarName: var.X for var in qcqp.getVars()}
+    except AttributeError as e:
+        safe_savemodel("output/algorithm", qcqp)
+        print("Failed to solve model.")
+        raise e
+    return qcqp.objVal, variables
+
+
 def to_original_graph_flow(full_flow: dict[str, float], G: nx.Graph):
     """First get rid of variables corresponding to arcs not present in the original graph.
     Then, for each pair of antiparallel arcs, subtract the smaller flow from the larger flow and remove
@@ -107,28 +137,3 @@ def to_original_graph_flow(full_flow: dict[str, float], G: nx.Graph):
 
 def print_with_seconds_elapsed_since(text_before: str, start_time: datetime):
     print(f"{text_before}{(datetime.now()-start_time).total_seconds():.2} seconds.")
-
-
-def solve(G, verbosity=1):
-    sstart = datetime.now()
-    Gp = split_nodes_and_direct_arcs(G)
-    Gpp = split_sources_and_time_expand(Gp)
-    if verbosity > 0:
-        print_with_seconds_elapsed_since("Graph modifications algorithm ran in ", sstart)
-    if verbosity > 2:
-        plot_graph(G)
-        plot_graph(Gp)
-        plot_graph(Gpp)
-    start = datetime.now()
-    cost, flow = find_optimal_flow(Gpp, verbose=(verbosity > 1))
-    if verbosity > 0:
-        print_with_seconds_elapsed_since("Defined and solved Gurobi program in ", start)
-    start = datetime.now()
-    merged_flow = to_original_graph_flow(flow, G)
-    if verbosity > 0:
-        print_with_seconds_elapsed_since("Flow merging ran in ", start)
-        print_with_seconds_elapsed_since("Obtained merged flow. Total runtime: ", sstart)
-    if verbosity > 1:
-        print_flow(cost, merged_flow, merged=True)
-        plot_flow(merged_flow, G)
-    return cost, merged_flow
