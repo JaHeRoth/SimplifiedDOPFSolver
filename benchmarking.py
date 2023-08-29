@@ -12,7 +12,7 @@ from numpy.polynomial import Polynomial
 from tqdm import tqdm
 
 from instances import from_graph
-from solving import solve
+from algorithm.solving import solve
 
 
 def run_and_display(graph_type, max_nodes, repeats_per_record=3, num_unique_n=10, num_runs=40, overwrite=True):

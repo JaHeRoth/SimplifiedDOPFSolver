@@ -5,7 +5,7 @@ import networkx
 import networkx as nx
 from gurobipy import Model, GRB, quicksum
 
-from outputting import print_flow, plot_flow, plot_graph
+from algorithm.outputting import print_flow, plot_flow, plot_graph
 
 
 def find_optimal_flow(Gpp, verbose=False):
