@@ -1,3 +1,4 @@
+import math
 import os
 import re
 from datetime import datetime
@@ -52,8 +53,8 @@ def split_sources_and_time_expand(G):
     for src in sources:
         for j, (length, cost) in enumerate(G.nodes[src]["c"]):
             Gp.add_edge("s*", f"{src}|{j}", c=cost, mu=1, r=0, u=length)
-            for i, step_duration in enumerate(step_lengths):
-                Gp.add_edge(f"{src}|{j}", f"{src}'{i}", c=cost, mu=1/step_duration, r=0, u=length)
+            for i, step_length in enumerate(step_lengths):
+                Gp.add_edge(f"{src}|{j}", f"{src}'{i}", c=cost, mu=1/step_length, r=0, u=length)
     return Gp
 
 
@@ -114,16 +115,19 @@ def to_original_graph_flow(full_flow, G):
     #     for parc in G.in_edges(arc[0], keys=True):
     #         del flow[f"x_{parc}"]
     #         del flow[f"y_{parc}"]
-    for u, v in G.edges:
+    for u, v, attr in G.edges(data=True):
         for i in range(G.graph["k"]):
             ui, vi = f"{u}'{i}", f"{v}'{i}"
             arc, aarc = str((ui, vi)), str((vi, ui))
-            # Shortcut way to check if forward flow beats backwards flow, assuming large differences
-            if flow[f"y_{arc}"] > flow[f"x_{aarc}"]:
-                flow[f"y_{arc}"] -= flow[f"x_{aarc}"]
-                flow[f"x_{arc}"] -= flow[f"y_{aarc}"]
-                del flow[f"x_{aarc}"]
-                del flow[f"y_{aarc}"]
+            if flow[f"y_{arc}"] > flow[f"y_{aarc}"]:
+                small, large = aarc, arc
+            else:
+                small, large = arc, aarc
+            flow[f"x_{large}"] -= flow[f"y_{small}"]
+            # y = x - rx^2
+            flow[f"y_{large}"] = flow[f"x_{large}"] - attr["r"] * flow[f"x_{large}"] ** 2
+            del flow[f"x_{small}"]
+            del flow[f"y_{small}"]
     return flow
 
 
