@@ -1,17 +1,14 @@
 import json
 import os
 import time
-from math import ceil
 from pathlib import Path
 from timeit import Timer
-from sklearn.ensemble import IsolationForest
-import statsmodels.api as sm
 
 import networkx as nx
 import numpy as np
-from numpy.polynomial import Polynomial
 import pandas as pd
 from matplotlib import pyplot as plt
+from numpy.polynomial import Polynomial
 from tqdm import tqdm
 
 from instances import from_graph

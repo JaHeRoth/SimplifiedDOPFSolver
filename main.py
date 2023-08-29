@@ -6,19 +6,16 @@ from timeit import Timer
 
 from benchmarking import run_and_display
 
-# import numpy as np
-# from matplotlib import pyplot as plt
-# from gurobipy import Model, quicksum, GRB
-# import time
-# import grid2op
-# import networkx as nx
-# from tqdm import tqdm
-#
-# from benchmarking import benchmark, load_benchmark, sample_runtimes, sampled_confidence_intervals, \
-#     record_structured_runtimes, structured_confidence_intervals
-# from instances import grid_from_graph, trivial_instance, attach_derived_attr, alg3_instance, realistic_instance
-# from solving import solve, algorithm1, find_optimal_flow, algorithm3
-# from outputting import plot_graph
+import numpy as np
+from matplotlib import pyplot as plt
+from gurobipy import Model, quicksum, GRB
+import time
+import grid2op
+import networkx as nx
+from tqdm import tqdm
+
+from solving import solve, find_optimal_flow
+from outputting import plot_graph
 
 # G = fetch_l2rpn_graph("l2rpn_case14_sandbox")
 # solve(grid_from_graph(nx.complete_graph(5)), verbosity=3)
