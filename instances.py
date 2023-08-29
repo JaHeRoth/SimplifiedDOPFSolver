@@ -24,9 +24,9 @@ def to_digraph(sources: dict, sinks: dict, step_durations: tuple, arcs: list):
 
 def basic_instance():
     return from_attributes(
-        rcpus={"v": [(1, 1), (2, 2)]},
-        ccpus={"u": [(1, 1), (2, 2)]},
-        demands={"u": (1,), "v": (2,)},
+        rcpus={"v": [(2, 1), (2, 6)]},
+        ccpus={"u": [(4, 0.6), (3, 6)]},
+        demands={"u": (2,), "v": (2,)},
         resistances={("u", "v"): 1e-1},
         capacities={("u", "v"): 2})
 

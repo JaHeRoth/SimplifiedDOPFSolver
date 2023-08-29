@@ -1,5 +1,7 @@
+import os
 import time
 from itertools import islice
+from pathlib import Path
 
 import networkx as nx
 from matplotlib import pyplot as plt
@@ -43,11 +45,16 @@ def plot_flow(flow: dict, G: nx.Graph):
         else:
             nx.draw_networkx(Gi, node_size=50, with_labels=False, node_color=node_color,
                              edge_cmap=plt.get_cmap("cool"), edge_color=edge_intensity, edge_vmin=0, edge_vmax=1)
-        plt.savefig(f"plots/{time.time()}.pdf", bbox_inches='tight')
+        safe_savefig("output/algorithm", f"{time.time()}.pdf")
         plt.show()
 
 
 def plot_graph(graph: nx.Graph | nx.DiGraph):
     nx.draw_networkx(graph)
-    plt.savefig(f"plots/{graph.graph['name']}_{time.time()}.pdf", bbox_inches='tight')
+    safe_savefig("output/algorithm", f"{graph.graph['name']}_{time.time()}.pdf")
     plt.show()
+
+
+def safe_savefig(outdir: str, filename: str):
+    os.makedirs(outdir, exist_ok=True)
+    plt.savefig(Path(outdir) / filename, bbox_inches='tight')
