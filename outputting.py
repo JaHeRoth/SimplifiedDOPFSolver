@@ -28,6 +28,7 @@ from matplotlib import pyplot as plt
 
 def print_flow(cost, flow, merged=False):
     print("---------------------------------------------")
+    # TODO: Rather recompute cost when merging
     # Merging antiparallel flows will typically reduce the cost. As `cost` is the cost of the unmerged flow it
     # thus tends to be a slight overapproximation of the cost of the merged flow
     print(f"Obtained solution of value {'at most' if merged else ''} {cost}:")
@@ -60,8 +61,8 @@ def plot_flow(flow, G):
         plt.show()
 
 
-def plot_graph(graph, name):
+def plot_graph(graph):
     # TODO: Instead have name be a graph property
     nx.draw_networkx(graph)
-    plt.savefig(f"plots/{name}_{time.time()}.pdf", bbox_inches='tight')
+    plt.savefig(f"plots/{graph.graph['name']}_{time.time()}.pdf", bbox_inches='tight')
     plt.show()

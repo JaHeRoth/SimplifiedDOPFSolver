@@ -38,10 +38,10 @@ def find_optimal_flow(G, verbose=False):
     return qcqp.objVal, variables
 
 
-def algorithm1(G):
+def split_sources_and_time_expand(G):
     sources, sinks, arcs, k, step_durations =\
         G.graph["sources"], G.graph["sinks"], G.edges, G.graph["k"], G.graph["step_durations"]
-    Gp = nx.DiGraph(sinks=set())
+    Gp = nx.DiGraph(sinks=set(), name="Gpp")
     for i in range(k):
         for u, v, attr in arcs(data=True):
             Gp.add_edge(f"{u}'{i}", f"{v}'{i}", c=0, mu=1, r=attr["r"], u=attr["u"])
@@ -56,7 +56,7 @@ def algorithm1(G):
     return Gp
 
 
-def algorithm3(G):
+def split_nodes_and_direct_arcs(G):
     # Steps 1 & 4
     src_connected = set(nx.multi_source_dijkstra_path_length(
         G, G.graph["sources"].keys()).keys())
@@ -64,6 +64,7 @@ def algorithm3(G):
         G, G.graph["sinks"].keys()).keys())
     relevant = src_connected.intersection(sink_connected)
     Gp = G.subgraph(relevant).to_directed()
+    Gp.graph["name"] = "Gp"
     Gp.graph["sources"] = set()
     Gp.graph["sinks"] = set()
     # Step 2
@@ -131,14 +132,14 @@ def to_original_graph_flow(full_flow, G):
 
 def solve(G, verbosity=1):
     sstart = datetime.now()
-    Gp = algorithm3(G)
-    Gpp = algorithm1(Gp)
+    Gp = split_nodes_and_direct_arcs(G)
+    Gpp = split_sources_and_time_expand(Gp)
     if verbosity > 0:
         print(f"Graph modifications algorithm ran in {(datetime.now()-sstart).total_seconds():.2} seconds.")
     if verbosity > 2:
-        plot_graph(G, "G")
-        plot_graph(Gp, "Gp")
-        plot_graph(Gpp, "Gpp")
+        plot_graph(G)
+        plot_graph(Gp)
+        plot_graph(Gpp)
     start = datetime.now()
     cost, flow = find_optimal_flow(Gpp, verbose=(verbosity > 1))
     if verbosity > 0:

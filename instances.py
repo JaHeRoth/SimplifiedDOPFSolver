@@ -107,7 +107,7 @@ def from_attributes(capacities: dict, resistances: dict, demands: dict, rcpus=No
 
     no_demand = tuple(np.repeat(0, k))
     no_supply_cpu = [(0, 0)]
-    graph = nx.Graph(capacities=capacities, k=k, step_lengths=step_lengths)
+    graph = nx.Graph(capacities=capacities, k=k, step_lengths=step_lengths, name="G")
     for name, costs in rcpus.items():
         graph.add_node(name, cr=costs, d=no_demand)
     for name, costs in ccpus.items():
