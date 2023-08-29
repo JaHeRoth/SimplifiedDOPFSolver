@@ -12,7 +12,7 @@ def problem5_instance():
                       arcs=[("s", "d", {"r": 1e-1, "u": 3})])
 
 
-def to_digraph(sources, sinks, step_durations, arcs):
+def to_digraph(sources: dict, sinks: dict, step_durations: tuple, arcs: list):
     return nx.DiGraph(nodes={**sources,**sinks},
                       edges=arcs,
                       sources=sources,
@@ -77,8 +77,7 @@ def fetch_l2rpn_graph(env_name="l2rpn_case14_sandbox"):
     return nx.relabel_nodes(nx.Graph(l2rpn_graph), lambda node: str(node))
 
 
-def from_graph(G):
-    """G: networkx graph with numbers as node names"""
+def from_graph(G: nx.Graph):
     nx.relabel_nodes(G, lambda node: str(node), copy=False)
     supplies = {node: 70 + np.random.rand() * 70 for node in G.nodes}
     return from_attributes(

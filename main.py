@@ -14,8 +14,12 @@ import grid2op
 import networkx as nx
 from tqdm import tqdm
 
+from instances import ieee14, basic_instance
 from solving import solve, find_optimal_flow
 from outputting import plot_graph
+
+# solve(ieee14(), verbosity=3)
+solve(basic_instance(), verbosity=3)
 
 # G = fetch_l2rpn_graph("l2rpn_case14_sandbox")
 # solve(grid_from_graph(nx.complete_graph(5)), verbosity=3)

@@ -33,19 +33,19 @@ def find_optimal_flow(Gpp, verbose=False):
 def split_sources_and_time_expand(Gp):
     sources, sinks, arcs, k, step_lengths =\
         Gp.graph["sources"], Gp.graph["sinks"], Gp.edges, Gp.graph["k"], Gp.graph["step_lengths"]
-    Gp = nx.DiGraph(sinks=set(), name="Gpp")
+    Gpp = nx.DiGraph(sinks=set(), name="Gpp")
     for i in range(k):
         for u, v, attr in arcs(data=True):
-            Gp.add_edge(f"{u}'{i}", f"{v}'{i}", c=0, mu=1, r=attr["r"], u=attr["u"])
+            Gpp.add_edge(f"{u}'{i}", f"{v}'{i}", c=0, mu=1, r=attr["r"], u=attr["u"])
         for sink in sinks:
-            Gp.add_node(f"{sink}'{i}", d=Gp.nodes[sink]["d"][i])
-            Gp.graph["sinks"].add(f"{sink}'{i}")
+            Gpp.add_node(f"{sink}'{i}", d=Gp.nodes[sink]["d"][i])
+            Gpp.graph["sinks"].add(f"{sink}'{i}")
     for src in sources:
         for j, (length, cost) in enumerate(Gp.nodes[src]["c"]):
-            Gp.add_edge("s*", f"{src}|{j}", c=cost, mu=1, r=0, u=length)
+            Gpp.add_edge("s*", f"{src}|{j}", c=cost, mu=1, r=0, u=length)
             for i, step_length in enumerate(step_lengths):
-                Gp.add_edge(f"{src}|{j}", f"{src}'{i}", c=cost, mu=1/step_length, r=0, u=length)
-    return Gp
+                Gpp.add_edge(f"{src}|{j}", f"{src}'{i}", c=cost, mu=1/step_length, r=0, u=length)
+    return Gpp
 
 
 def split_nodes_and_direct_arcs(G: networkx.Graph):
@@ -84,21 +84,21 @@ def split_nodes_and_direct_arcs(G: networkx.Graph):
     return Gp.subgraph(src_connected & sink_connected)
 
 
-def to_original_graph_flow(full_flow, G: nx.Graph):
+def to_original_graph_flow(full_flow: dict[str, float], G: nx.Graph):
     """First get rid of variables corresponding to arcs not present in the original graph.
     Then, for each pair of antiparallel arcs, subtract the smaller flow from the larger flow and remove
-    the variables corresponding to the smaller flow (adds waste to that arc unless resistance is 0)."""
+    the variables corresponding to the smaller flow. Update costs correspondingly."""
     # Example: In "x_(\"s\'0", \"d\'0\")" we match with "s" and "d", giving ("s", "d"), which is in G.edges
     flow = {var: val for var, val in full_flow.items() if re.match(
         "[xy]_\\(['\"]([^'\"]+).+, ['\"]([^'\"]+).+", var).groups() in G.edges}
     for u, v, attr in G.edges(data=True):
         for i in range(G.graph["k"]):
             ui, vi = f"{u}'{i}", f"{v}'{i}"
-            arc, aarc = str((ui, vi)), str((vi, ui))
-            if flow[f"y_{arc}"] > flow[f"y_{aarc}"]:
-                small, large = aarc, arc
+            arc, rarc = str((ui, vi)), str((vi, ui))
+            if flow[f"y_{arc}"] > flow[f"y_{rarc}"]:
+                small, large = rarc, arc
             else:
-                small, large = arc, aarc
+                small, large = arc, rarc
             flow[f"x_{large}"] -= flow[f"y_{small}"]
             flow[f"y_{large}"] = flow[f"x_{large}"] - attr["r"] * flow[f"x_{large}"] ** 2
             del flow[f"x_{small}"], flow[f"y_{small}"]
