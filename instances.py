@@ -55,10 +55,10 @@ def ieee14(kilo_volts=-2):
         raise ValueError
     supplies = {"1": 300, "2": 500, "3": 55, "6": 300, "8": 700}
     cost_coeff = {"1": (16.91, 0.00048), "2": (17.26, 0.00031), "3": (0, 0), "6": (16.6, 0.002), "8": (16.5, 0.00211)}
-    graph = fetch_l2rpn_graph()
+    G = fetch_l2rpn_graph()
     return from_attributes(
-        capacities={edge: capacity for edge in graph.edges},
-        resistances={edge: resistance for edge in graph.edges},
+        capacities={edge: capacity for edge in G.edges},
+        resistances={edge: resistance for edge in G.edges},
         demands={str(node): [1200 / 14] for node in range(14)},
         ccpus={key: [(supply / 2, cost_coeff[key][0]),
                      (supply / 2, cost_coeff[key][0] + cost_coeff[key][1] * (supply / 2) ** 2)]
@@ -77,16 +77,16 @@ def fetch_l2rpn_graph(env_name="l2rpn_case14_sandbox"):
     return nx.relabel_nodes(nx.Graph(l2rpn_graph), lambda node: str(node))
 
 
-def from_graph(graph):
-    """graph: networkx graph with numbers as node names"""
-    nx.relabel_nodes(graph, lambda node: str(node), copy=False)
-    supplies = {node: 70 + np.random.rand() * 70 for node in graph.nodes}
+def from_graph(G):
+    """G: networkx graph with numbers as node names"""
+    nx.relabel_nodes(G, lambda node: str(node), copy=False)
+    supplies = {node: 70 + np.random.rand() * 70 for node in G.nodes}
     return from_attributes(
-        capacities={arc: np.random.rand() * 25 for arc in graph.edges},
-        resistances={arc: 10 ** -(2 + 3 * np.random.rand()) for arc in graph.edges},
-        demands={node: [np.random.rand() * 10 for _ in range(4)] for node in graph.nodes},
+        capacities={arc: np.random.rand() * 25 for arc in G.edges},
+        resistances={arc: 10 ** -(2 + 3 * np.random.rand()) for arc in G.edges},
+        demands={node: [np.random.rand() * 10 for _ in range(4)] for node in G.nodes},
         ccpus={node: [(supplies[node] * 2 / 3, np.random.rand()),
-                      (supplies[node] / 3, 1)] for node in graph.nodes},
+                      (supplies[node] / 3, 1)] for node in G.nodes},
         step_lengths=[1, 2, 3, 1]
     )
 
@@ -106,14 +106,13 @@ def from_attributes(capacities: dict, resistances: dict, demands: dict, rcpus=No
     assert resistances.keys() == capacities.keys(), "Resistance and capacity must be provided for every edge"
 
     no_demand = tuple(np.repeat(0, k))
-    no_supply_cpu = [(0, 0)]
-    graph = nx.Graph(capacities=capacities, k=k, step_lengths=step_lengths, name="G")
+    G = nx.Graph(capacities=capacities, k=k, step_lengths=step_lengths, name="G")
     for name, costs in rcpus.items():
-        graph.add_node(name, cr=costs, d=no_demand)
+        G.add_node(name, cr=costs, d=no_demand)
     for name, costs in ccpus.items():
-        graph.add_node(name, c=costs, d=no_demand)
+        G.add_node(name, c=costs, d=no_demand)
     for name, demand in demands.items():
-        graph.add_node(name, d=demand)
+        G.add_node(name, d=demand)
     for name, resistance in resistances.items():
-        graph.add_edge(name[0], name[1], r=resistance, u=capacities[name])
-    return graph
+        G.add_edge(name[0], name[1], r=resistance, u=capacities[name])
+    return G
