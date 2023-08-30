@@ -1,29 +1,34 @@
+from enum import Enum
+
 import grid2op
 import networkx as nx
 import numpy as np
 
 
 def problem5_instance():
+    """
+    :return: A barely infeasible instance of the min-cost dynamic generalized S-D flow with quadratic losses, that
+     Gurobi finds to be feasible (as it allows small infeasibilities). Consists of the source `"s"`, the sink `"d"`,
+     the arc `("s", "d")`, and a single unit-length time step.
+    """
     # Exact feasibility requires cumulative supply of: (5-sqrt(15)) + (5-sqrt(5) + 2*(5-sqrt(15)) = 20-sqrt(5)-3sqrt(15)
     # = 6.1449819838779596480530301319215249320606165245137017959663814562, so this instance should be barely infeasible
-    return to_digraph(sources={"s": {"c": [(4, 1), (2.1449009999999999, 2)]}},
-                      sinks={"d": {"d": (1, 2)}},
-                      step_lengths=(1, 1),
-                      arcs=[("s", "d", {"r": 1e-1, "u": 3})])
-
-
-def to_digraph(sources: dict, sinks: dict, step_lengths: tuple, arcs: list):
+    sources = {"s": {"c": [(4, 1), (2.1449009999999999, 2)]}}
+    sinks = {"d": {"d": (1, 2)}}
+    step_lengths = (1, 1)
     G = nx.DiGraph(sources=sources.keys(),
                    sinks=sinks.keys(),
                    step_lengths=step_lengths,
-                   capacity={(u, v): attr["u"] for u, v, attr in arcs},
                    k=len(step_lengths))
     G.add_nodes_from({**sources, **sinks}.items())
-    G.add_edges_from(arcs)
+    G.add_edge("s", "d", r=1e-1, u=3)
     return G
 
 
 def basic_instance():
+    """
+    :return: A DOPF instance consisting of the nodes `"u"` and `"v"`, the edge `("u","v")`, and a single time step.
+    """
     return from_attributes(
         rcpus={"v": [(2, 1), (2, 6)]},
         ccpus={"u": [(4, 0.6), (3, 6)]},
@@ -33,6 +38,15 @@ def basic_instance():
 
 
 def ieee14(kV: int):
+    """
+    :param kV: The kilovoltage we imagine power being transmitted in (used to determine capacity and resistance).
+     Possible values are 345, 500, 765, -1, -2, where -1 and -2 are special values that represent a very easy and a
+     very hard instance respectively. The very hard instance is at the boundary of what Gurobi considers feasible,
+     hence usually but not always results in Gurobi not finding a solution.
+    :return: A DOPF instance corresponding to the IEEE14 graph, with attributes corresponding to
+     "Optimal Power Systems Planning for IEEE-14 Bus Test System Application" and
+     "Transmission Facts" (by AMERICAN ELECTRIC POWER) for the given `kV`
+    """
     # Numbers copied or estimated from "Optimal Power Systems Planning for IEEE-14 Bus Test System Application"
     # and "Transmission Facts" (by AMERICAN ELECTRIC POWER)
     # Note how everything is in MW instead of in current, as these are anyway just a multiple when voltage is constant
@@ -68,10 +82,17 @@ def ieee14(kV: int):
 
 
 def ieee118():
+    """
+    :return: A DOPF instance corresponding to the IEEE118 graph with random node and edge attributes.
+    """
     return from_graph(fetch_l2rpn_graph(env_name="l2rpn_wcci_2022"))
 
 
 def fetch_l2rpn_graph(env_name="l2rpn_case14_sandbox"):
+    """
+    :param env_name: The string identifier in grid2op of the desire graph.
+    :return: The graph corresponding to `env_name`, without any useful attributes.
+    """
     env = grid2op.make(env_name)
     obs = env.reset()
     l2rpn_graph = obs.get_energy_graph()
@@ -79,6 +100,10 @@ def fetch_l2rpn_graph(env_name="l2rpn_case14_sandbox"):
 
 
 def from_graph(G: nx.Graph):
+    """
+    :param G: An undirected NetworkX graph.
+    :return: A feasible DOPF instance with `G` as graph but random attributes for all edges and nodes.
+    """
     nx.relabel_nodes(G, lambda node: str(node), copy=False)
     supplies = {node: 70 + np.random.rand() * 70 for node in G.nodes}
     return from_attributes(
@@ -92,6 +117,21 @@ def from_graph(G: nx.Graph):
 
 
 def from_attributes(capacities: dict, resistances: dict, demands: dict, rcpus=None, ccpus=None, step_lengths=None):
+    """
+    Create a DOPF instance from attributes.
+    :param capacities: `capacities[("u", "v")]` is the capacity of the edge between the nodes "u" and "v".
+    :param resistances: `resistances[("u", "v")]` is the resistance of the edge between the nodes "u" and "v".
+    :param demands: `demands["d"][i]` is the demand at sink "d" at the i-th time step.
+    :param rcpus: If the marginal production cost at source "s" depens on the curretn production rate, then
+     `rcpus["s"][i]` is a tuple describing the width of the i-th constant piece of this marginal production cost
+     function and its value on that piece.
+    :param ccpus: `ccpus["s"][i]` is defined like `rcpus["s"][i]`, but for the case where the marginal production
+     cost at "s" depends on the cumulative production at "s" so far.
+    :param step_lengths: `step_lengths[i]` is the duration of the i-th time step (recall that the demands function
+     is constant on each time step, but not necessarily between these).
+    :return: A DOPF instance that contains the edges and nodes described in the parameters, with those parameters
+     as attributes.
+    """
     k = len(iter(demands.values()).__next__())
     if rcpus is None:
         rcpus = {}

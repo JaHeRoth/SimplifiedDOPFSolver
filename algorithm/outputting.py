@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import datetime
 from itertools import islice
 from pathlib import Path
 
@@ -9,6 +10,8 @@ from matplotlib import pyplot as plt
 
 
 def print_flow(cost: float, flow: dict, merged: bool, max_values_printed=20):
+    """Print at most `max_values_printed` of the flow `flow`, together with its value `cost` (or its value before it
+     was merged, in the case of `merged=True`)."""
     print("---------------------------------------------")
     # Merging antiparallel flows will typically reduce the cost slightly. As `cost` is the cost
     #  of the unmerged flow it will then be a slight overapproximation of the cost of the merged flow.
@@ -21,6 +24,7 @@ def print_flow(cost: float, flow: dict, merged: bool, max_values_printed=20):
 
 
 def plot_flow(flow: dict, G: nx.Graph):
+    """Plot `flow` as a heatmap on the graph `G` that it acts."""
     for i in range(G.graph["k"]):
         Gi = nx.DiGraph()
         edge_intensity, edge_use = [], {}
@@ -52,17 +56,23 @@ def plot_flow(flow: dict, G: nx.Graph):
 
 
 def plot_graph(graph: nx.Graph | nx.DiGraph):
+    """Save and show a plot of `graph`."""
     nx.draw_networkx(graph)
     safe_savefig("output/algorithm", f"{graph.graph['name']}_{time.time()}.pdf")
     plt.show()
 
 
 def safe_savefig(outdir: str, filename: str):
+    """Create `outdir` if it doesn't exist. Then save the current pyplot figure to `Path(outdir) / filename`."""
     os.makedirs(outdir, exist_ok=True)
     plt.savefig(Path(outdir) / filename, bbox_inches='tight')
 
 
 def safe_savemodel(outdir: str, model: gurobipy.Model):
+    """Create `outdir` if it doesn't exist. Then save `model` to `Path(outdir) / "model.lp"`."""
     os.makedirs(outdir, exist_ok=True)
     model.write(f"{outdir}/model.lp")
 
+
+def print_with_seconds_elapsed_since(text_before: str, start_time: datetime):
+    print(f"{text_before}{(datetime.now()-start_time).total_seconds():.2} seconds.")

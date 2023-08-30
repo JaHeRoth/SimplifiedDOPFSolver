@@ -1,10 +1,11 @@
 import networkx as nx
 from matplotlib import pyplot as plt
 
+from algorithm import solve
 from algorithm.outputting import print_flow
+from algorithm.solving import find_optimal_flow, split_sources_and_time_expand
 from benchmarking import run_and_display
 from instances import basic_instance, ieee14, ieee118, problem5_instance
-from algorithm.solving import solve, split_sources_and_time_expand, find_optimal_flow
 
 solve(ieee14(kV=345), verbosity=2)
 solve(ieee118(), verbosity=2)

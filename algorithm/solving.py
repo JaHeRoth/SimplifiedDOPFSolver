@@ -5,10 +5,15 @@ import networkx
 import networkx as nx
 from gurobipy import Model, GRB, quicksum
 
-from algorithm.outputting import print_flow, plot_flow, plot_graph, safe_savemodel
+from algorithm.outputting import print_flow, plot_flow, plot_graph, safe_savemodel, print_with_seconds_elapsed_since
 
 
-def solve(G, verbosity=1):
+def solve(G: nx.Graph, verbosity=1):
+    """
+    :param G: NetworkX graph corresponding to our Problem 4 (DOPF) instance.
+    :param verbosity: How much to print and plot, ranging from nothing to all intermediate graphs.
+    :return: Algorithm 12 applied to `G`, although with its second step replaced by standard Gurobi optimization.
+    """
     sstart = datetime.now()
     Gp = split_nodes_and_direct_arcs(G)
     Gpp = split_sources_and_time_expand(Gp)
@@ -34,6 +39,10 @@ def solve(G, verbosity=1):
 
 
 def split_nodes_and_direct_arcs(G: networkx.Graph):
+    """
+    :return: Algorithm 5 applied to `G`. Direct the graph; introduce a sink per node, a source per node with cumulative
+     supply, a source per constant piece of the marginal production cost function of each node with supply rate;
+     keep only nodes and arcs that belong to some S-D walk."""
     # Step 1
     Gp: networkx.DiGraph = G.to_directed()
     Gp.graph["name"] = "Gp"
@@ -69,7 +78,10 @@ def split_nodes_and_direct_arcs(G: networkx.Graph):
     return Gp.subgraph(src_connected & sink_connected)
 
 
-def split_sources_and_time_expand(Gp):
+def split_sources_and_time_expand(Gp: nx.DiGraph):
+    """
+    :return: Algorithm 1 applied to `Gp`. Make `Gp.graph["k"]` (number of time steps) copies of the graph, split every
+     source at the breakpoints of its marginal production cost function, introduce a super-source, connect by arcs."""
     sources, sinks, arcs, k, step_lengths =\
         Gp.graph["sources"], Gp.graph["sinks"], Gp.edges, Gp.graph["k"], Gp.graph["step_lengths"]
     Gpp = nx.DiGraph(sinks=set(), name="Gpp")
@@ -87,7 +99,10 @@ def split_sources_and_time_expand(Gp):
     return Gpp
 
 
-def find_optimal_flow(Gpp, verbose=False):
+def find_optimal_flow(Gpp: nx.DiGraph, verbose=False):
+    """Replaces Algorithm 11, i.e. Step 2 of Algorithm 12. Formulate a Program 5 (convex QCQP) instance from `Gpp`
+    (its nodes and edges and their attributes) with gurobipy and solve this with Gurobi.
+    :return: The obtained value and solution for the Program 5 instance corresponding to `Gpp`."""
     qcqp = Model(name="QCQP")
     x, y = {}, {}
     for a in Gpp.edges:
@@ -109,15 +124,17 @@ def find_optimal_flow(Gpp, verbose=False):
         variables = {var.VarName: var.X for var in qcqp.getVars()}
     except AttributeError as e:
         safe_savemodel("output/algorithm", qcqp)
-        print("Failed to solve model.")
+        print("Failed to solve model. It has been printed to ./output/algorithm/model.lp for debugging.")
         raise e
     return qcqp.objVal, variables
 
 
 def to_original_graph_flow(full_flow: dict[str, float], G: nx.Graph):
-    """First get rid of variables corresponding to arcs not present in the original graph.
-    Then, for each pair of antiparallel arcs, subtract the smaller flow from the larger flow and remove
-    the variables corresponding to the smaller flow. Update costs correspondingly."""
+    """
+    :return: Algorithm 6 applied to `full_flow`. First get rid of variables corresponding to arcs not present in
+     the original graph. Then, for each pair of antiparallel arcs, subtract the smaller flow from the larger flow and
+     remove the variables corresponding to the smaller flow. Update costs correspondingly.
+    """
     # Example: In "x_(\"s\'0", \"d\'0\")" we match with "s" and "d", giving ("s", "d"), which is in G.edges
     flow = {var: val for var, val in full_flow.items() if re.match(
         "[xy]_\\(['\"]([^'\"]+).+, ['\"]([^'\"]+).+", var).groups() in G.edges}
@@ -133,7 +150,3 @@ def to_original_graph_flow(full_flow: dict[str, float], G: nx.Graph):
             flow[f"y_{large}"] = flow[f"x_{large}"] - attr["r"] * flow[f"x_{large}"] ** 2
             del flow[f"x_{small}"], flow[f"y_{small}"]
     return flow
-
-
-def print_with_seconds_elapsed_since(text_before: str, start_time: datetime):
-    print(f"{text_before}{(datetime.now()-start_time).total_seconds():.2} seconds.")
