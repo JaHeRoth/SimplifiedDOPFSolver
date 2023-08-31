@@ -1,1 +1,1 @@
-from solving import solve
+from algorithm.solving import solve

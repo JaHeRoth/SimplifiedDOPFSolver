@@ -7,6 +7,8 @@ from algorithm.solving import find_optimal_flow, split_sources_and_time_expand
 from benchmarking import run_and_display
 from instances import basic_instance, ieee14, ieee118, problem5_instance
 
+# DEMO CODE, REPLACE WITH YOUR OWN
+# --------------------------------
 solve(ieee14(kV=345), verbosity=2)
 solve(ieee118(), verbosity=2)
 try:
@@ -20,3 +22,4 @@ nx.draw_networkx(split_sources_and_time_expand(problem5_instance())); plt.show()
 print_flow(*find_optimal_flow(split_sources_and_time_expand(problem5_instance())), merged=False)
 run_and_display(graph_type="circular ladder", max_nodes=101, num_runs=1)
 run_and_display(graph_type="circular ladder", max_nodes=22, overwrite=False)
+# --------------------------------
